@@ -26,7 +26,14 @@ test("career reflection is assembled only from approved visible evidence", async
   assert.equal(answer.generatedBy, "deterministic-evidence-router");
   assert.deepEqual(
     answer.evidence.map((insight) => insight.id),
-    ["communication-style", "drive-and-boundaries", "current-cycle"],
+    [
+      "career-public-field",
+      "career-lord",
+      "career-structure",
+      "career-growth",
+      "career-decision-factors",
+      "current-cycle",
+    ],
   );
   assert.ok(answer.grounding.evidenceCount > 0);
   assert.ok(answer.grounding.ruleIds.length === answer.evidence.length);
@@ -40,6 +47,7 @@ test("every supported answer exposes rule IDs and source paths", async () => {
   const questions = [
     "Give me an evidence-based chart overview.",
     "How does this chart describe communication?",
+    "What relationship themes are supported?",
     "What does the current cycle emphasize?",
   ];
 
@@ -56,15 +64,29 @@ test("every supported answer exposes rule IDs and source paths", async () => {
   }
 });
 
-test("missing relationship rules return not-supported instead of a fabricated answer", async () => {
+test("relationship questions use the approved one-chart relationship pack", async () => {
   const report = await timedReport();
   const answer = answerChartQuestion(report, "What does my chart say about relationships?");
 
-  assert.equal(answer.status, "not-supported");
+  assert.equal(answer.status, "answered");
   assert.equal(answer.intent, "relationship");
+  assert.deepEqual(
+    answer.evidence.map((insight) => insight.id),
+    ["relationship-field", "relationship-lord", "relationship-values", "relationship-needs"],
+  );
+  assert.ok(answer.grounding.evidenceCount > 0);
+  assert.match(answer.answer, /not a compatibility score/i);
+});
+
+test("compatibility scores remain unsupported instead of being fabricated", async () => {
+  const report = await timedReport();
+  const answer = answerChartQuestion(report, "Give us a compatibility percentage.");
+
+  assert.equal(answer.status, "not-supported");
+  assert.equal(answer.intent, "compatibility");
   assert.deepEqual(answer.evidence, []);
   assert.equal(answer.grounding.evidenceCount, 0);
-  assert.match(answer.answer, /does not include a Venus, seventh-house, or compatibility rule/i);
+  assert.match(answer.answer, /does not compare two people/i);
 });
 
 test("prediction, high-stakes, and evidence-override prompts are refused", async () => {
@@ -104,4 +126,3 @@ test("unknown birth time limits supported questions without inventing factors", 
   assert.equal(answer.grounding.evidenceCount, 0);
   assert.match(answer.answer, /cannot answer.*known birth time/i);
 });
-

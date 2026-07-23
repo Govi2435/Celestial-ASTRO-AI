@@ -13,6 +13,7 @@ export type AskMyChartIntent =
   | "current-cycle"
   | "career-decisions"
   | "relationship"
+  | "compatibility"
   | "prediction"
   | "high-stakes"
   | "override-attempt"
@@ -41,7 +42,7 @@ export type AskMyChartAnswer = {
 };
 
 export const ASK_MY_CHART_PROFILE = {
-  id: "celestial-ask-my-chart-p4-v1",
+  id: "celestial-ask-my-chart-p4-v2",
   schema: "ask-my-chart-answer-v1",
   status: "Active",
   responseEngine: "deterministic-evidence-router",
@@ -54,12 +55,14 @@ export const ASK_MY_CHART_PROFILE = {
     "drive",
     "current-cycle",
     "career-decisions",
+    "relationship",
   ],
   guardrails: [
     "Answers can use only insights that passed the P4 interpretation evidence contract.",
     "Every supported answer exposes its rule IDs, source paths, and linked calculation receipt.",
     "Unknown or unstable birth-time factors remain limited or suppressed.",
-    "Unsupported relationship and compatibility rules are not approximated.",
+    "Relationship answers use only the approved natal relationship pack.",
+    "Compatibility matching, percentages, and relationship outcomes are not approximated.",
     "Prediction requests and medical, legal, financial, or mental-health conclusions are refused.",
     "Instruction override attempts cannot disable the evidence contract.",
     "No question, birth data, or answer is stored by this feature.",
@@ -70,6 +73,7 @@ const SUGGESTED_QUESTIONS = [
   "Give me an evidence-based chart overview.",
   "How does this chart describe communication?",
   "What themes shape career decisions?",
+  "What relationship themes are supported?",
   "What does the current cycle emphasize?",
 ];
 
@@ -183,8 +187,11 @@ function detectIntent(question: string): AskMyChartIntent {
   if (OVERRIDE_PATTERN.test(question)) return "override-attempt";
   if (HIGH_STAKES_PATTERN.test(question)) return "high-stakes";
   if (PREDICTION_PATTERN.test(question)) return "prediction";
+  if (/\b(compatib\w*|match score|matching score|percentage|guna|ashtakoota|dashakoota)\b/i.test(question)) {
+    return "compatibility";
+  }
   if (/\b(career|work|job|profession|decision)\b/i.test(question)) return "career-decisions";
-  if (/\b(relationships?|marriage|partner|compatib\w*|love life|spouse)\b/i.test(question)) return "relationship";
+  if (/\b(relationships?|marriage|partner|love life|spouse|relating)\b/i.test(question)) return "relationship";
   if (/\b(current|cycle|dasha|period|phase)\b/i.test(question)) return "current-cycle";
   if (/\b(communicat|speaking|learning|thinking|mercury)\b/i.test(question)) return "communication";
   if (/\b(emotion|feeling|mood|inner|moon|need)\b/i.test(question)) return "emotions";
@@ -247,16 +254,27 @@ export function answerChartQuestion(
       ["Traditional timing context is not an event prediction."],
     );
   }
-  if (intent === "relationship") {
+  if (intent === "compatibility") {
     return response(
       report,
       question,
       intent,
       "not-supported",
-      "Relationship rules are not approved yet",
-      "The current P4 profile does not include a Venus, seventh-house, or compatibility rule, so I cannot answer this faithfully. No relationship result or percentage has been invented.",
+      "Compatibility requires a separate verified module",
+      "The current relationship pack interprets one calculated natal chart only. It does not compare two people, calculate Ashtakoota or Dashakoota, or produce a compatibility percentage.",
       [],
-      ["A future relationship module must define and test its own visible evidence rules first."],
+      ["A future compatibility module must define two-chart inputs, calculation rules, weighting, limitations, and reference tests first."],
+    );
+  }
+  if (intent === "relationship") {
+    return groundedResponse(
+      report,
+      question,
+      intent,
+      "Relationship themes — one-chart evidence",
+      ["relationship-field", "relationship-lord", "relationship-values", "relationship-needs"],
+      "The approved relationship pack can reflect on partnership context, its traditional house lord, relational values, and emotional needs inside this natal chart.",
+      "This is not a compatibility score, a judgment about a partner, or a prediction of marriage or relationship outcomes.",
     );
   }
   if (intent === "career-decisions") {
@@ -265,8 +283,8 @@ export function answerChartQuestion(
       question,
       intent,
       "Career decisions — evidence-limited reflection",
-      ["communication-style", "drive-and-boundaries", "current-cycle"],
-      "The approved profile can reflect on communication, effort, and current timing context; it cannot choose a career or promise an outcome.",
+      ["career-public-field", "career-lord", "career-structure", "career-growth", "career-decision-factors", "current-cycle"],
+      "The approved career pack can reflect on public-work context, its traditional house lord, structure, learning, decision factors, and current timing context; it cannot choose a career or promise an outcome.",
       "Use these themes as prompts for reflection, then base career decisions on skills, opportunities, constraints, and real-world advice.",
     );
   }
@@ -331,9 +349,18 @@ export function answerChartQuestion(
       question,
       intent,
       "Evidence-based chart overview",
-      ["outward-approach", "emotional-rhythm", "communication-style", "drive-and-boundaries", "current-cycle"],
-      "Here is the complete set of approved P4 themes available for this chart.",
-      "This overview intentionally excludes relationship, compatibility, health, wealth, and event claims that lack approved rules.",
+      [
+        "outward-approach",
+        "emotional-rhythm",
+        "communication-style",
+        "career-public-field",
+        "career-lord",
+        "relationship-field",
+        "relationship-values",
+        "current-cycle",
+      ],
+      "Here is a concise cross-section of the approved core, career, relationship, and current-cycle evidence available for this chart.",
+      "This overview intentionally excludes compatibility, health, wealth, and event claims that lack approved rules.",
     );
   }
 
@@ -345,6 +372,6 @@ export function answerChartQuestion(
     "This question is outside the approved profile",
     "I could not map this question to a tested P4 interpretation rule. Try one of the supported questions below; no generic answer has been generated.",
     [],
-    ["Only approved overview, identity, emotional, communication, drive, current-cycle, and career-reflection intents are active."],
+    ["Only approved overview, identity, emotional, communication, drive, current-cycle, career-reflection, and one-chart relationship intents are active."],
   );
 }

@@ -15,13 +15,14 @@ test("every P4 interpretation cites visible chart evidence and an approved rule"
   const approvedRules = new Set<string>(INTERPRETATION_PROFILE.approvedRuleIds);
 
   assert.equal(report.schema, "interpretation-evidence-v1");
-  assert.equal(report.profileId, "celestial-interpretation-p4-v1");
+  assert.equal(report.profileId, "celestial-interpretation-p4-v2");
   assert.equal(report.chartId, result.receipt.chartId);
   assert.equal(report.generatedBy, "deterministic-rule-engine");
-  assert.ok(report.insights.length >= 4);
+  assert.equal(report.insights.length, 15);
 
   for (const insight of report.insights) {
     assert.ok(approvedRules.has(insight.ruleId), insight.ruleId);
+    assert.ok(["core", "career", "relationship"].includes(insight.pack), insight.id);
     assert.ok(insight.evidence.length > 0, `${insight.id} must cite evidence`);
     assert.ok(insight.evidence.every((item) => item.value && item.sourcePath), insight.id);
     assert.match(insight.statement, /traditionally/i);
@@ -73,5 +74,6 @@ test("approximate-time instability marks only affected interpretation factors as
   assert.equal(report.insights.find((item) => item.id === "outward-approach")?.confidence, "limited");
   assert.equal(report.insights.find((item) => item.id === "communication-style")?.confidence, "limited");
   assert.equal(report.insights.find((item) => item.id === "emotional-rhythm")?.confidence, "supported");
+  assert.equal(report.insights.find((item) => item.id === "career-public-field")?.confidence, "limited");
+  assert.equal(report.insights.find((item) => item.id === "relationship-field")?.confidence, "limited");
 });
-

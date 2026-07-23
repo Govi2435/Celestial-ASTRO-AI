@@ -19,6 +19,7 @@ import type {
 import {
   buildInterpretationReport,
   INTERPRETATION_PROFILE,
+  type InterpretationPack,
   type InterpretationReport,
 } from "./interpretation";
 import type { AskMyChartAnswer } from "./ask-my-chart";
@@ -368,7 +369,18 @@ function ReceiptPanel({ receipt }: { receipt: CalculationReceipt }) {
   );
 }
 
+const INTERPRETATION_FILTERS: { id: "all" | InterpretationPack; label: string }[] = [
+  { id: "all", label: "All rules" },
+  { id: "core", label: "Core" },
+  { id: "career", label: "Career" },
+  { id: "relationship", label: "Relationships" },
+];
+
 function InterpretationPanel({ report }: { report: InterpretationReport }) {
+  const [activePack, setActivePack] = useState<"all" | InterpretationPack>("all");
+  const visibleInsights =
+    activePack === "all" ? report.insights : report.insights.filter((insight) => insight.pack === activePack);
+
   return (
     <article className="interpretation-lab glass-panel" id="interpretations">
       <div className="interpretation-heading">
@@ -381,14 +393,36 @@ function InterpretationPanel({ report }: { report: InterpretationReport }) {
           <span className={`evidence-badge ${report.status === "limited" ? "limited" : "interpreted"}`}>
             {report.status === "limited" ? "Limited evidence" : "Evidence linked"}
           </span>
-          <small>{report.insights.length} approved rules</small>
+          <small>{report.insights.length} approved rules • 3 packs</small>
         </div>
       </div>
 
+      {report.insights.length > 0 && (
+        <div className="interpretation-filters" role="group" aria-label="Interpretation rule packs">
+          {INTERPRETATION_FILTERS.map((filter) => {
+            const count =
+              filter.id === "all"
+                ? report.insights.length
+                : report.insights.filter((insight) => insight.pack === filter.id).length;
+            return (
+              <button
+                type="button"
+                key={filter.id}
+                className={activePack === filter.id ? "active" : ""}
+                aria-pressed={activePack === filter.id}
+                onClick={() => setActivePack(filter.id)}
+              >
+                {filter.label} <span>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {report.insights.length > 0 ? (
         <div className="interpretation-grid">
-          {report.insights.map((insight) => (
-            <section className="interpretation-card" key={insight.id}>
+          {visibleInsights.map((insight) => (
+            <section className="interpretation-card" data-pack={insight.pack} key={insight.id}>
               <div className="interpretation-card-topline">
                 <span>{insight.category}</span>
                 <b className={insight.confidence}>
@@ -463,6 +497,7 @@ const ASK_SUGGESTIONS = [
   "Give me an evidence-based chart overview.",
   "How does this chart describe communication?",
   "What themes shape career decisions?",
+  "What relationship themes are supported?",
   "What does the current cycle emphasize?",
 ];
 
@@ -650,7 +685,7 @@ function AskMyChartPanel({
 
       <div className="ask-contract">
         <span>SUPPORTED</span>
-        <p>Overview • identity • emotions • communication • drive • current cycle • career reflection</p>
+        <p>Overview • identity • emotions • communication • drive • current cycle • career evidence • relationship themes</p>
         <span>BLOCKED</span>
         <p>Guaranteed events • high-stakes advice • hidden evidence • unapproved compatibility claims</p>
         <a href="/api/ask-my-chart" target="_blank" rel="noreferrer">
@@ -955,7 +990,7 @@ export default function Home() {
           <a href="#scope">Scope</a>
         </nav>
         <div className="header-actions">
-          <span className="observatory-edition">P4 Grounded Q&amp;A</span>
+          <span className="observatory-edition">P4 • 15 approved rules</span>
           <div className="local-badge">
             <span className="live-dot" />
             Server calculation • no saved birth data
@@ -966,7 +1001,7 @@ export default function Home() {
       <section className="observatory-hero">
         <div className="hero-copy">
           <span className="accuracy-pill">
-            <Sparkle size={13} /> P2 certificate passed • grounded chart answers active
+            <Sparkle size={13} /> P2 certificate passed • 15 evidence-linked rules active
           </span>
           <h1>
             Your sky,
@@ -1511,8 +1546,8 @@ export default function Home() {
             <span>05</span>
             <h3>Evidence-linked interpretation</h3>
             <p>
-              P4 runs after calculation. Each traditional interpretation carries its approved rule ID, exact chart factors,
-              confidence state, and limitation. Unsupported readings are blocked instead of improvised.
+              P4 runs 15 approved core, career, and relationship rules after calculation. Each interpretation carries its exact
+              chart factors, rule ID, confidence state, and limitation.
             </p>
           </article>
           <article>
@@ -1605,6 +1640,8 @@ export default function Home() {
             <li>Approximate-time stability and unknown-time ranges</li>
             <li>P2 reference-chart regression certificate on every release</li>
             <li>P4 deterministic interpretations with visible evidence and rule IDs</li>
+            <li>Approved career pack using the 10th house, its traditional lord, Sun, Saturn, Jupiter, Mercury, and Mars</li>
+            <li>Approved relationship pack using the 7th house, its traditional lord, Venus, Moon, and visible limitations</li>
             <li>Grounded Ask My Chart answers with receipt-linked source factors</li>
           </ul>
         </div>
@@ -1615,7 +1652,7 @@ export default function Home() {
             <li>Full dosha cancellation and exception rules</li>
             <li>KP cuspal sub-lords and all D1–D60 Vargas</li>
             <li>Location-aware Muhurta start and end times</li>
-            <li>Ashtakoota or Dashakoota compatibility scores</li>
+            <li>Ashtakoota, Dashakoota, or unexplained compatibility scores</li>
             <li>Unrestricted, generative, or predictive AI chat</li>
             <li>Chart Story Mode, compatibility, and creative chart artwork</li>
             <li>True-node and alternate ayanamsa profiles</li>
