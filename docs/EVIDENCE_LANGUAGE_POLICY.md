@@ -1,6 +1,8 @@
 # Evidence and Language Policy
 
-Status: **Proposed v0.1 — owner approval required**
+Status: **Approved v1.0**  
+Approved by: **Govinda Prajapati**  
+Effective date: **2026-07-23**
 
 ## 1. Purpose
 

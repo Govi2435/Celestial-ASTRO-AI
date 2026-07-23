@@ -1,8 +1,9 @@
 # P0 Trust Contract
 
-Status: **Proposed v0.1 — owner approval required**  
+Status: **Approved v1.0**  
 Product: **Celestial ASTRO AI**  
-Effective date: **Not effective until approved**
+Approved by: **Govinda Prajapati**  
+Effective date: **2026-07-23**
 
 ## 1. Purpose
 
@@ -217,3 +218,20 @@ This contract uses semantic versions:
 - major: changed product promise, evidence model, or safety boundary
 
 Every major change requires explicit owner approval and a dated decision record.
+
+## 14. Approval and licensing decision
+
+P0 v1.0 was approved by Govinda Prajapati on 2026-07-23.
+
+The project selected the Swiss Ephemeris Professional Licence route. This
+decision authorizes P1 implementation planning and non-public engineering. It
+does not represent that a licence has already been purchased, executed, or
+granted.
+
+A public Swiss Ephemeris-backed service must not be activated until the
+Professional Licence is obtained and the project records the executed licence,
+required notices, permitted deployment scope, and renewal or termination
+conditions.
+
+Decision record:
+[ADR-0001](DECISIONS/ADR-0001-P0-APPROVAL.md)

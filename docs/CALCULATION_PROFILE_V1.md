@@ -1,6 +1,6 @@
 # Calculation Profile V1
 
-Status: **Proposed v0.1 — owner approval required**  
+Status: **Approved v1.0**  
 Profile ID: `vedic-lahiri-ws-mean-node-v1`
 
 ## 1. Purpose
@@ -30,13 +30,13 @@ whole-sign houses, and mean lunar nodes.
 
 ## 3. Professional engine requirement
 
-P1 should use Swiss Ephemeris on the backend only after one licensing route is
-selected:
+The project selected the **Swiss Ephemeris Professional Licence** route.
 
-1. AGPL-compatible publication of the software, or
-2. Swiss Ephemeris Professional Licence.
+P1 may perform implementation and non-public validation. A public service using
+Swiss Ephemeris must not be activated until the Professional Licence is
+obtained, its deployment scope is confirmed, and required notices are recorded.
 
-Astrodienst states that this licensing choice must be made before software
+Astrodienst states that the licensing choice must be made before software
 containing Swiss Ephemeris is distributed or a public service using it is
 activated.
 
@@ -124,9 +124,12 @@ These are not part of the first validated profile:
 They may be introduced as separately versioned profiles after V1 reference
 tests pass.
 
-## 8. Open approval decision
+## 8. Approved Dasha convention with validation gate
 
-Vimshottari Dasha date calculations require a documented year-length
-convention. P0 proposes `365.2425` days per year for deterministic civil-date
-conversion, but this value must be confirmed with the selected traditional
-reference and reference-chart fixtures before the profile becomes effective.
+V1 approves `365.2425` days per year as the deterministic civil-date conversion
+convention for Vimshottari Dasha calculations.
+
+P2 must validate this convention against the selected traditional reference and
+golden chart fixtures. If validation requires a different convention, the
+calculation profile must receive a new version; existing receipts must remain
+reproducible under this V1 profile.

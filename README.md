@@ -13,15 +13,17 @@ input.
 
 ## Product status
 
-The project is currently at **P0: Trust Contract and Product Boundaries**.
+P0 **Trust Contract and Product Boundaries v1.0** was approved on
+2026-07-23.
 
-P1 engineering must not begin until the P0 contract and initial calculation
-profile are approved.
+P1 engineering may begin. Public activation of a Swiss Ephemeris-backed service
+remains blocked until the selected Professional Licence has been obtained and
+recorded.
 
 | Phase | Outcome | Status |
 | --- | --- | --- |
-| P0 | Trust contract and product boundaries | Proposed for approval |
-| P1 | Professional ephemeris and birth-data pipeline | Blocked by P0 |
+| P0 | Trust contract and product boundaries | Approved v1.0 |
+| P1 | Professional ephemeris and birth-data pipeline | Ready; licence-gated activation |
 | P2 | Reference tests and calculation receipt | Planned |
 | P3 | Celestial Observatory customer experience | Planned |
 | P4 | Explainable AI and creative chart experiences | Planned |
@@ -34,6 +36,7 @@ profile are approved.
 - [Evidence and Language Policy](docs/EVIDENCE_LANGUAGE_POLICY.md)
 - [Calculation Receipt Specification](docs/CALCULATION_RECEIPT_SPEC.md)
 - [P0 Approval Checklist](docs/P0_APPROVAL_CHECKLIST.md)
+- [P0 Approval Decision](docs/DECISIONS/ADR-0001-P0-APPROVAL.md)
 
 ## Current prototype
 
@@ -49,9 +52,11 @@ Live prototype:
 
 ## P1 licensing gate
 
-Swiss Ephemeris uses a dual-licensing model: AGPL or a professional licence.
-The project must select and document one route before a public service using
-Swiss Ephemeris is activated.
+The project has selected the **Swiss Ephemeris Professional Licence** route.
+This records the licensing strategy; it does not claim that the licence has
+already been purchased or granted. P1 may perform non-public engineering, but a
+public Swiss Ephemeris-backed service must not be activated until the executed
+licence and required notices are recorded.
 
 Official reference:
 [Astrodienst Swiss Ephemeris](https://www.astro.com/swisseph/swephinfo_e.htm)

@@ -1,6 +1,8 @@
 # Calculation Receipt Specification
 
-Status: **Proposed v0.1 — owner approval required**  
+Status: **Approved v1.0**  
+Approved by: **Govinda Prajapati**  
+Effective date: **2026-07-23**  
 Receipt schema: `calculation-receipt-v1`
 
 ## 1. Purpose
