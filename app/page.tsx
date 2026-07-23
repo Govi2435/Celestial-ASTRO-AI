@@ -341,9 +341,9 @@ function ReceiptPanel({ receipt }: { receipt: CalculationReceipt }) {
     ["Astronomy kernel", `${receipt.kernel} • ${receipt.kernelLicense}`],
     ["Reference validation", receipt.validationSummary],
     ["Validation profile", receipt.validationProfile],
-    ["P2 certificate", `${receipt.certificationId} • ${receipt.certificationStatus}`],
+    ["P2 internal validation", `${receipt.certificationId} • ${receipt.certificationStatus}`],
     ["Certification profile", receipt.certificationProfile],
-    ["Certified coverage", receipt.certificationSummary],
+    ["Validated coverage", receipt.certificationSummary],
     ["Input fingerprint", receipt.inputFingerprint],
     ["Calculated at", receipt.calculatedAt],
   ];
@@ -476,10 +476,10 @@ function InterpretationPanel({ report }: { report: InterpretationReport }) {
           <strong>{report.chartId}</strong>
         </div>
         <div>
-          <span>AI STATUS</span>
-          <strong>Grounded answers active</strong>
+          <span>RESPONSE MODE</span>
+          <strong>Deterministic router • no generative model</strong>
         </div>
-        <a href="/api/interpretation-profile" target="_blank" rel="noreferrer">
+        <a href="/api/ask-my-chart" target="_blank" rel="noreferrer">
           Inspect profile ↗
         </a>
       </div>
@@ -550,7 +550,7 @@ function AskMyChartPanel({
           <span className="eyebrow">P4 • GROUNDED ASK MY CHART</span>
           <h3>Ask the evidence, not a fortune teller.</h3>
           <p>
-            Each question recalculates the same verified chart, then uses only approved P4 rules. No generative model, saved chat,
+            Each question recalculates the chart from the same submitted birth inputs, then uses only approved P4 rules. No generative model, saved chat,
             hidden prompt, or invented placement.
           </p>
         </div>
@@ -791,10 +791,10 @@ function PremiumReportPanel({
       </div>
       <div className="premium-report-copy">
         <span className="eyebrow">P5 • PREMIUM PDF REPORT</span>
-        <h3>Your chart, designed as a private observatory folio.</h3>
+        <h3>Your chart, designed as a direct-download observatory folio.</h3>
         <p>
-          The server recalculates your birth details, rebuilds the approved evidence, and creates a receipt-linked PDF. Browser
-          placements are never trusted and the generated file is not stored.
+          The server recalculates submitted birth details, rebuilds approved evidence, and returns a receipt-linked PDF directly. The current
+          P5 route does not store the file and is not yet protected by account, ownership, or subscription checks.
         </p>
         <div className="report-inclusions" aria-label="Premium report contents">
           <span>{timed ? "Celestial fingerprint" : "Date-range facts"}</span>
@@ -806,7 +806,7 @@ function PremiumReportPanel({
       <div className="premium-report-action">
         <span className="report-format">PDF • A4</span>
         <strong>{timed ? "Premium natal report" : "Premium date-range report"}</strong>
-        <small>Midnight observatory edition</small>
+        <small>Direct download • access protection pending</small>
         <button type="button" onClick={onDownload} disabled={generating}>
           <Sparkle size={14} />
           {generating ? "Building report…" : "Download premium PDF"}
@@ -839,7 +839,7 @@ export default function Home() {
     latitude: "",
     longitude: "",
     timezoneId: "",
-    provider: "Verified manual entry",
+    provider: "Manual user entry",
   });
   const chart = result?.kind === "timed" ? result.chart : null;
   const interpretation = result ? buildInterpretationReport(result) : null;
@@ -951,8 +951,8 @@ export default function Home() {
         `Engine: ${result.receipt.engineName} ${result.receipt.engineVersion} • ${result.receipt.engineStatus}`,
         `Kernel: ${result.receipt.kernel} • ${result.receipt.kernelLicense}`,
         `Validation: ${result.receipt.validationSummary}`,
-        `P2 certificate: ${result.receipt.certificationId} • ${result.receipt.certificationStatus}`,
-        `Certified coverage: ${result.receipt.certificationSummary}`,
+        `P2 internal validation: ${result.receipt.certificationId} • ${result.receipt.certificationStatus}`,
+        `Validated coverage: ${result.receipt.certificationSummary}`,
       ].join("\n");
       const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
       const link = document.createElement("a");
@@ -1002,8 +1002,8 @@ export default function Home() {
       `Engine: ${result.receipt.engineName} ${result.receipt.engineVersion}`,
       `Kernel: ${result.receipt.kernel} • ${result.receipt.kernelLicense}`,
       `Validation: ${result.receipt.validationSummary}`,
-      `P2 certificate: ${result.receipt.certificationId} • ${result.receipt.certificationStatus}`,
-      `Certified coverage: ${result.receipt.certificationSummary}`,
+      `P2 internal validation: ${result.receipt.certificationId} • ${result.receipt.certificationStatus}`,
+      `Validated coverage: ${result.receipt.certificationSummary}`,
       "Method: apparent geocentric ecliptic-of-date positions; whole-sign houses; mean Rahu/Ketu.",
       `Receipt: ${result.receipt.chartId}`,
       `Fingerprint: ${result.receipt.inputFingerprint}`,
@@ -1082,7 +1082,7 @@ export default function Home() {
           <span className="observatory-edition">P4 • 15 approved rules</span>
           <div className="local-badge">
             <span className="live-dot" />
-            Server calculation • no saved birth data
+            Server calculation • current routes do not persist birth data
           </div>
         </div>
       </header>
@@ -1090,14 +1090,14 @@ export default function Home() {
       <section className="observatory-hero">
         <div className="hero-copy">
           <span className="accuracy-pill">
-            <Sparkle size={13} /> P2 certificate passed • 15 evidence-linked rules active
+            <Sparkle size={13} /> Internal P2 checks passed • 15 deterministic rules active
           </span>
           <h1>
             Your sky,
             <em> calculated with receipts.</em>
           </h1>
           <p>
-            A premium Vedic calculation observatory built around verified birth data, historical timezone resolution, and methods you
+            A premium Vedic calculation observatory built around submitted birth details, historical timezone resolution, and methods you
             can inspect. No random placements. No invented certainty.
           </p>
           <div className="hero-actions">
@@ -1110,7 +1110,7 @@ export default function Home() {
           </div>
           <div className="hero-assurances" aria-label="Product assurances">
             <span>
-              <b>01</b> Birth data stays unsaved
+              <b>01</b> Current routes do not persist birth data
             </span>
             <span>
               <b>02</b> Unknown time stays unknown
@@ -1123,9 +1123,9 @@ export default function Home() {
 
         <aside className="observatory-console" aria-label="Engine certification status">
           <div className="console-topline">
-            <span>CELESTIAL OBSERVATORY / LIVE</span>
+            <span>CELESTIAL OBSERVATORY / CURRENT BUILD</span>
             <span className="console-live">
-              <i /> Operational
+              <i /> Runtime active
             </span>
           </div>
           <div className="orbital-instrument" aria-hidden="true">
@@ -1175,7 +1175,7 @@ export default function Home() {
           <div className="panel-heading">
             <div>
               <span className="eyebrow">REQUIRED INPUT</span>
-              <h2>Verified birth details</h2>
+              <h2>Submitted birth details</h2>
             </div>
             <span className="step-badge">01</span>
           </div>
@@ -1228,7 +1228,7 @@ export default function Home() {
               </div>
             )}
             <details className="manual-location">
-              <summary>Verified manual location</summary>
+              <summary>Manual location entry</summary>
               <label>
                 Location label
                 <span className="field-wrap">
@@ -1236,7 +1236,7 @@ export default function Home() {
                   <input
                     value={location.displayName}
                     onChange={(event) =>
-                      setLocation((current) => ({ ...current, displayName: event.target.value, provider: "Verified manual entry" }))
+                      setLocation((current) => ({ ...current, displayName: event.target.value, provider: "Manual user entry" }))
                     }
                     placeholder="City, state, country"
                   />
@@ -1250,7 +1250,7 @@ export default function Home() {
                     <input
                       value={location.latitude}
                       onChange={(event) =>
-                        setLocation((current) => ({ ...current, latitude: event.target.value, provider: "Verified manual entry" }))
+                        setLocation((current) => ({ ...current, latitude: event.target.value, provider: "Manual user entry" }))
                       }
                       type="number"
                       min="-90"
@@ -1266,7 +1266,7 @@ export default function Home() {
                     <input
                       value={location.longitude}
                       onChange={(event) =>
-                        setLocation((current) => ({ ...current, longitude: event.target.value, provider: "Verified manual entry" }))
+                        setLocation((current) => ({ ...current, longitude: event.target.value, provider: "Manual user entry" }))
                       }
                       type="number"
                       min="-180"
@@ -1283,7 +1283,7 @@ export default function Home() {
                   <input
                     value={location.timezoneId}
                     onChange={(event) =>
-                      setLocation((current) => ({ ...current, timezoneId: event.target.value, provider: "Verified manual entry" }))
+                      setLocation((current) => ({ ...current, timezoneId: event.target.value, provider: "Manual user entry" }))
                     }
                     placeholder="Example: Asia/Kolkata"
                   />
@@ -1437,7 +1437,7 @@ export default function Home() {
                 <span className="evidence-badge calculated">Calculated</span>
                 <p>
                   Active engine: Celestial Calculation Engine 1.0.0, powered by Astronomy Engine 2.1.19 under the MIT licence.
-                  The pinned NASA/JPL DE441 reference set passed.
+                  The pinned NASA/JPL Horizons fixtures passed the documented threshold; this is not NASA certification or a universal accuracy claim.
                 </p>
               </article>
               <article className="chart-card glass-panel">
@@ -1656,7 +1656,7 @@ export default function Home() {
             <h3>Versioned receipt</h3>
             <p>
               Every successful result includes its normalized UTC, coordinates, timezone data, profile, active engine, method,
-              P2 certificate, timestamp, and deterministic input fingerprint.
+              P2 internal validation, timestamp, and deterministic input fingerprint.
             </p>
           </article>
           <article>
@@ -1671,7 +1671,7 @@ export default function Home() {
             <span>06</span>
             <h3>Grounded chart questions</h3>
             <p>
-              Ask My Chart recalculates from the verified inputs and assembles answers only from approved P4 evidence. Unsupported
+              Ask My Chart recalculates from the submitted inputs and assembles answers only from approved P4 evidence. Unsupported
               questions and prediction requests are labelled instead of answered generically.
             </p>
           </article>
@@ -1681,13 +1681,13 @@ export default function Home() {
       <section className="certification-section" id="certification">
         <article className="certificate-panel">
           <div className="certificate-heading">
-            <div className="certificate-seal" aria-label="P2 certification passed">
+            <div className="certificate-seal" aria-label="P2 internal validation checks passed">
               <span>P2</span>
               <strong>PASS</strong>
             </div>
             <div>
-              <span className="eyebrow">REFERENCE CHART CERTIFICATION</span>
-              <h2>Reproducible across real-world time conditions.</h2>
+              <span className="eyebrow">INTERNAL REFERENCE VALIDATION</span>
+              <h2>Pinned fixtures reproduced across selected time conditions.</h2>
               <p>
                 This internal certificate locks complete chart outputs across five locations and verifies the same profile on every
                 future code change. It is evidence of reproducibility—not third-party accreditation or proof of predictions.
@@ -1709,7 +1709,7 @@ export default function Home() {
             </div>
             <div>
               <strong>{CERTIFICATION_PROFILE.externalPositionChecks}</strong>
-              <span>NASA/JPL comparisons</span>
+              <span>pinned NASA/JPL checks</span>
             </div>
             <div>
               <strong>{CERTIFICATION_PROFILE.timeScenarios}</strong>
@@ -1721,7 +1721,7 @@ export default function Home() {
             <div>
               <span>EXTERNAL REFERENCE</span>
               <strong>NASA/JPL Horizons DE441</strong>
-              <p>Apparent geocentric planetary longitudes with a one-arcminute acceptance threshold.</p>
+              <p>Pinned apparent geocentric longitude fixtures checked against a one-arcminute threshold; not NASA certification.</p>
             </div>
             <div>
               <span>PINNED REGRESSION</span>
@@ -1734,7 +1734,7 @@ export default function Home() {
             <code>{CERTIFICATION_PROFILE.certificateId}</code>
             <span>Issued {CERTIFICATION_PROFILE.issuedOn}</span>
             <a href="/api/certification" target="_blank" rel="noreferrer">
-              View machine-readable certificate ↗
+              View machine-readable validation record ↗
             </a>
           </div>
         </article>
@@ -1755,12 +1755,12 @@ export default function Home() {
             <li>Automatic place-to-IANA-timezone resolution</li>
             <li>Historical DST validation and Calculation Receipt</li>
             <li>Approximate-time stability and unknown-time ranges</li>
-            <li>P2 reference-chart regression certificate on every release</li>
+            <li>P2 pinned reference regression record for the current build</li>
             <li>P4 deterministic interpretations with visible evidence and rule IDs</li>
             <li>Approved career pack using the 10th house, its traditional lord, Sun, Saturn, Jupiter, Mercury, and Mars</li>
             <li>Approved relationship pack using the 7th house, its traditional lord, Venus, Moon, and visible limitations</li>
               <li>Grounded Ask My Chart answers with receipt-linked source factors</li>
-              <li>Private, server-recalculated premium PDF with chart evidence and receipt</li>
+              <li>Direct-download, server-recalculated premium PDF; account protection pending</li>
           </ul>
         </div>
         <div className="not-calculated">
@@ -1783,7 +1783,7 @@ export default function Home() {
       <section className="trust-note">
         <Sparkle />
         <div>
-          <strong>Free MIT accuracy route • P2 certified • P4 evidence contract • P5 premium report</strong>
+          <strong>MIT calculation route • internal P2 validation • P4 evidence contract • P5 direct-download report</strong>
           <p>
             Every chart identifies the engine, kernel, licence, method IDs, timezone data, NASA/JPL reference profile, and P2
             certificate used. Every traditional interpretation and supported chart answer links back to visible evidence. No layer is

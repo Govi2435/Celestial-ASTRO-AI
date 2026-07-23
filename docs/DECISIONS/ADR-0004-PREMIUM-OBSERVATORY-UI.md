@@ -24,10 +24,10 @@ The interface combines:
 The first viewport must communicate, in order:
 
 1. the product calculates rather than invents;
-2. the engine and reference certificate are active;
-3. birth data is not saved;
+2. the engine and internal reference-validation record are visible;
+3. current calculation routes do not persist birth data;
 4. the calculator is the primary action; and
-5. methodology and certification remain directly inspectable.
+5. methodology and internal validation remain directly inspectable.
 
 ## Accessibility rules
 
