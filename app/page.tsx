@@ -10,11 +10,11 @@ import {
 } from "./astro";
 import type {
   BirthTimeConfidence,
+  CalculationResult,
   CalculationReceipt,
   CalculationRequest,
-  ProfessionalCalculationResult,
   UnknownCalculationResult,
-} from "./professional";
+} from "./calculation";
 
 type ChartMode = "North Indian" | "South Indian" | "Zodiac Wheel";
 
@@ -323,10 +323,15 @@ function ReceiptPanel({ receipt }: { receipt: CalculationReceipt }) {
     ["Historical offset", `${receipt.timezoneOffset} • ${receipt.timezoneAbbreviation}`],
     ["Timezone data", receipt.timezoneDataVersion],
     ["Calculation profile", receipt.profileId],
-    ["Ayanamsa", receipt.ayanamsa],
-    ["Houses / nodes", `${receipt.houseSystem} • ${receipt.nodeMethod}`],
+    ["Ayanamsa", `${receipt.ayanamsa} • ${receipt.ayanamsaProfileId}`],
+    [
+      "Houses / nodes",
+      `${receipt.houseSystem} (${receipt.houseProfileId}) • ${receipt.nodeMethod} (${receipt.nodeProfileId})`,
+    ],
     ["Active engine", `${receipt.engineName} ${receipt.engineVersion} • ${receipt.engineStatus}`],
-    ["Professional engine", receipt.professionalEngine],
+    ["Astronomy kernel", `${receipt.kernel} • ${receipt.kernelLicense}`],
+    ["Reference validation", receipt.validationSummary],
+    ["Validation profile", receipt.validationProfile],
     ["Input fingerprint", receipt.inputFingerprint],
     ["Calculated at", receipt.calculatedAt],
   ];
@@ -425,7 +430,7 @@ function UnknownTimePanel({ result }: { result: UnknownCalculationResult }) {
 }
 
 export default function Home() {
-  const [result, setResult] = useState<ProfessionalCalculationResult | null>(null);
+  const [result, setResult] = useState<CalculationResult | null>(null);
   const [mode, setMode] = useState<ChartMode>("North Indian");
   const [error, setError] = useState("");
   const [calculating, setCalculating] = useState(false);
@@ -500,7 +505,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      const payload = (await response.json()) as ProfessionalCalculationResult & { error?: string };
+      const payload = (await response.json()) as CalculationResult & { error?: string };
       if (!response.ok) throw new Error(payload.error || "The calculation could not be completed.");
       if (payload.kind === "timed") {
         payload.chart.utcDate = new Date(payload.chart.utcDate);
@@ -544,6 +549,8 @@ export default function Home() {
         `Receipt: ${result.receipt.chartId}`,
         `Fingerprint: ${result.receipt.inputFingerprint}`,
         `Engine: ${result.receipt.engineName} ${result.receipt.engineVersion} • ${result.receipt.engineStatus}`,
+        `Kernel: ${result.receipt.kernel} • ${result.receipt.kernelLicense}`,
+        `Validation: ${result.receipt.validationSummary}`,
       ].join("\n");
       const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
       const link = document.createElement("a");
@@ -578,11 +585,13 @@ export default function Home() {
       `Birth Tithi: ${result.chart.tithi}`,
       `Birth Yoga: ${result.chart.yoga}`,
       "",
-      "Method: Astronomy Engine geocentric positions; whole-sign houses; mean Rahu/Ketu.",
+      `Engine: ${result.receipt.engineName} ${result.receipt.engineVersion}`,
+      `Kernel: ${result.receipt.kernel} • ${result.receipt.kernelLicense}`,
+      `Validation: ${result.receipt.validationSummary}`,
+      "Method: apparent geocentric ecliptic-of-date positions; whole-sign houses; mean Rahu/Ketu.",
       `Receipt: ${result.receipt.chartId}`,
       `Fingerprint: ${result.receipt.inputFingerprint}`,
       `Timezone data: ${result.receipt.timezoneDataVersion}`,
-      `Professional engine: ${result.receipt.professionalEngine}`,
       "This report contains calculated data, not professional or predictive advice.",
     ].join("\n");
     const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
@@ -876,8 +885,8 @@ export default function Home() {
               <article className="engine-gate">
                 <span className="evidence-badge calculated">Calculated</span>
                 <p>
-                  Active engine: Astronomy Engine provisional fallback. Swiss Ephemeris Professional Licence route selected; engine
-                  not activated.
+                  Active engine: Celestial Calculation Engine 1.0.0, powered by Astronomy Engine 2.1.19 under the MIT licence.
+                  The pinned NASA/JPL DE441 reference set passed.
                 </p>
               </article>
               <article className="chart-card glass-panel">
@@ -1056,8 +1065,8 @@ export default function Home() {
             <span>01</span>
             <h3>Astronomical positions</h3>
             <p>
-              Sun, Moon, and planetary positions come from Astronomy Engine, based on VSOP87 and NOVAS-derived models and validated
-              against JPL data. Its stated target is approximately ±1 arcminute.
+              Celestial Calculation Engine 1.0.0 uses the MIT-licensed Astronomy Engine kernel. The kernel states an approximately
+              ±1 arcminute target; our pinned 20-position NASA/JPL DE441 reference set has a maximum observed delta of 0.190 arcminute.
             </p>
           </article>
           <article>
@@ -1106,26 +1115,26 @@ export default function Home() {
         </div>
         <div className="not-calculated">
           <span className="eyebrow">NOT CLAIMED YET</span>
-          <h2>Requires a validated production engine</h2>
+          <h2>Outside this engine profile</h2>
           <ul>
             <li>Full dosha cancellation and exception rules</li>
             <li>KP cuspal sub-lords and all D1–D60 Vargas</li>
             <li>Location-aware Muhurta start and end times</li>
             <li>Ashtakoota or Dashakoota compatibility scores</li>
             <li>AI-generated personalized readings</li>
-            <li>Swiss Ephemeris branding or precision claims</li>
-            <li>Public Swiss engine activation before the Professional Licence is obtained</li>
+            <li>True-node and alternate ayanamsa profiles</li>
+            <li>Accuracy claims beyond the documented kernel target and pinned reference set</li>
           </ul>
         </div>
       </section>
 
-      <section className="license-note">
+      <section className="trust-note">
         <Sparkle />
         <div>
-          <strong>Professional engine activation gate</strong>
+          <strong>Free MIT accuracy route active</strong>
           <p>
-            The Swiss Ephemeris Professional Licence route is approved, but the licence and production engine are not installed.
-            Current receipts therefore identify Astronomy Engine as the provisional fallback. No result is labelled Swiss output.
+            Every chart identifies the engine, kernel, licence, method IDs, timezone data, and NASA/JPL reference profile used.
+            Reference results prove the tested fixtures only; they are not a claim of perfect prediction or universal precision.
           </p>
         </div>
       </section>

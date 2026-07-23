@@ -1,5 +1,14 @@
-import { calculateChart, type BirthInput, type ChartResult, formatDegrees } from "./astro";
-import { localPartsAtInstant, resolveLocalDay, resolveLocalTime } from "./timezone";
+import { calculateChart, type BirthInput, type ChartResult, formatDegrees } from "./astro.ts";
+import {
+  AYANAMSA_PROFILE,
+  CALCULATION_PROFILE_ID,
+  DATE_RANGE_PROFILE_ID,
+  ENGINE_PROFILE,
+  HOUSE_PROFILE,
+  NODE_PROFILE,
+  engineFingerprint,
+} from "./engine-profile.ts";
+import { localPartsAtInstant, resolveLocalDay, resolveLocalTime } from "./timezone.ts";
 
 export type BirthTimeConfidence = "exact" | "approximate" | "unknown";
 
@@ -17,7 +26,7 @@ export type CalculationRequest = {
 };
 
 export type CalculationReceipt = {
-  schema: "calculation-receipt-v1";
+  schema: "calculation-receipt-v2";
   chartId: string;
   inputFingerprint: string;
   calculatedAt: string;
@@ -30,15 +39,21 @@ export type CalculationReceipt = {
   timezoneAbbreviation: string;
   timezoneDataVersion: string;
   placeProvider: string;
-  profileId: "vedic-lahiri-ws-mean-node-v1" | "vedic-lahiri-date-range-v1";
+  profileId: typeof CALCULATION_PROFILE_ID | typeof DATE_RANGE_PROFILE_ID;
   zodiac: "Sidereal";
-  ayanamsa: "Mean Lahiri approximation";
+  ayanamsa: typeof AYANAMSA_PROFILE.name;
+  ayanamsaProfileId: typeof AYANAMSA_PROFILE.id;
   houseSystem: "Whole sign" | "Suppressed";
-  nodeMethod: "Mean node";
-  engineName: "Astronomy Engine";
-  engineVersion: "2.1.19";
-  engineStatus: "Provisional fallback";
-  professionalEngine: "Swiss Ephemeris Professional Licence selected — engine not activated";
+  houseProfileId: typeof HOUSE_PROFILE.id | "suppressed";
+  nodeMethod: typeof NODE_PROFILE.name;
+  nodeProfileId: typeof NODE_PROFILE.id;
+  engineName: typeof ENGINE_PROFILE.name;
+  engineVersion: typeof ENGINE_PROFILE.version;
+  engineStatus: "Active";
+  kernel: `${typeof ENGINE_PROFILE.kernelName} ${typeof ENGINE_PROFILE.kernelVersion}`;
+  kernelLicense: typeof ENGINE_PROFILE.kernelLicense;
+  validationProfile: typeof ENGINE_PROFILE.validationProfile;
+  validationSummary: typeof ENGINE_PROFILE.validationSummary;
 };
 
 export type StabilityCheck = {
@@ -78,7 +93,7 @@ export type UnknownCalculationResult = {
   receipt: CalculationReceipt;
 };
 
-export type ProfessionalCalculationResult = TimedCalculationResult | UnknownCalculationResult;
+export type CalculationResult = TimedCalculationResult | UnknownCalculationResult;
 
 function validateRequest(input: CalculationRequest) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error("Enter a valid birth date.");
@@ -145,13 +160,13 @@ async function receipt(
     input,
     normalizedUtc,
     profileId,
-    engine: "astronomy-engine@2.1.19",
+    engine: engineFingerprint(),
     timezoneDataVersion,
   });
   const fingerprint = await sha256(canonical);
   const calculatedAt = new Date().toISOString();
   return {
-    schema: "calculation-receipt-v1",
+    schema: "calculation-receipt-v2",
     chartId: `chart_${fingerprint.slice(0, 16)}`,
     inputFingerprint: `sha256:${fingerprint}`,
     calculatedAt,
@@ -166,13 +181,19 @@ async function receipt(
     placeProvider: input.placeProvider,
     profileId,
     zodiac: "Sidereal",
-    ayanamsa: "Mean Lahiri approximation",
+    ayanamsa: AYANAMSA_PROFILE.name,
+    ayanamsaProfileId: AYANAMSA_PROFILE.id,
     houseSystem: input.timeConfidence === "unknown" ? "Suppressed" : "Whole sign",
-    nodeMethod: "Mean node",
-    engineName: "Astronomy Engine",
-    engineVersion: "2.1.19",
-    engineStatus: "Provisional fallback",
-    professionalEngine: "Swiss Ephemeris Professional Licence selected — engine not activated",
+    houseProfileId: input.timeConfidence === "unknown" ? "suppressed" : HOUSE_PROFILE.id,
+    nodeMethod: NODE_PROFILE.name,
+    nodeProfileId: NODE_PROFILE.id,
+    engineName: ENGINE_PROFILE.name,
+    engineVersion: ENGINE_PROFILE.version,
+    engineStatus: "Active",
+    kernel: `${ENGINE_PROFILE.kernelName} ${ENGINE_PROFILE.kernelVersion}`,
+    kernelLicense: ENGINE_PROFILE.kernelLicense,
+    validationProfile: ENGINE_PROFILE.validationProfile,
+    validationSummary: ENGINE_PROFILE.validationSummary,
   };
 }
 
@@ -218,7 +239,7 @@ async function calculateTimed(input: CalculationRequest): Promise<TimedCalculati
       offset,
       resolved.abbreviation,
       resolved.timezoneDataVersion,
-      "vedic-lahiri-ws-mean-node-v1",
+      CALCULATION_PROFILE_ID,
     ),
   };
 }
@@ -271,17 +292,12 @@ async function calculateUnknown(input: CalculationRequest): Promise<UnknownCalcu
       "Varies across local day",
       "Date-range mode",
       day.timezoneDataVersion,
-      "vedic-lahiri-date-range-v1",
+      DATE_RANGE_PROFILE_ID,
     ),
   };
 }
 
-export async function calculateProfessional(input: CalculationRequest): Promise<ProfessionalCalculationResult> {
+export async function calculateCelestial(input: CalculationRequest): Promise<CalculationResult> {
   validateRequest(input);
-  if (process.env.CELESTIAL_EPHEMERIS_ENGINE === "swiss") {
-    throw new Error(
-      "Swiss Ephemeris activation is blocked until the Professional Licence and production engine are installed.",
-    );
-  }
   return input.timeConfidence === "unknown" ? calculateUnknown(input) : calculateTimed(input);
 }

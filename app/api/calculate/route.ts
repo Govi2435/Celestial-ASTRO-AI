@@ -1,15 +1,15 @@
-import { calculateProfessional, type CalculationRequest } from "../../professional";
+import { calculateCelestial, type CalculationRequest } from "../../calculation.ts";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
     const input = (await request.json()) as CalculationRequest;
-    const result = await calculateProfessional(input);
+    const result = await calculateCelestial(input);
     return Response.json(result, {
       headers: {
         "Cache-Control": "no-store",
-        "X-Celestial-Engine": "astronomy-engine-provisional",
+        "X-Celestial-Engine": "celestial-mit-v1",
       },
     });
   } catch (caught) {

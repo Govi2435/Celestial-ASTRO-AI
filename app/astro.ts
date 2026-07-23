@@ -6,6 +6,7 @@ import {
   SiderealTime,
   SunPosition,
 } from "astronomy-engine";
+import { AYANAMSA_PROFILE } from "./engine-profile.ts";
 
 export type ZodiacSystem = "lahiri" | "tropical";
 
@@ -205,13 +206,15 @@ function julianDay(date: Date) {
 }
 
 /**
- * Mean Lahiri/Chitrapaksha ayanamsa anchored at J2000 and advanced using
- * the general precession rate. This is deliberately labelled "mean Lahiri"
- * in the interface and is not presented as Swiss Ephemeris output.
+ * Versioned mean Lahiri/Chitrapaksha model. The method is intentionally
+ * explicit: a J2000 anchor advanced by a fixed general-precession rate.
  */
 export function lahiriMeanAyanamsa(date: Date) {
-  const yearsFromJ2000 = (julianDay(date) - 2_451_545.0) / 365.2425;
-  return 23.85675 + (yearsFromJ2000 * 50.290966) / 3600;
+  const yearsFromJ2000 = (julianDay(date) - AYANAMSA_PROFILE.anchorJulianDay) / 365.2425;
+  return (
+    AYANAMSA_PROFILE.anchorDegrees +
+    (yearsFromJ2000 * AYANAMSA_PROFILE.annualPrecessionArcseconds) / 3600
+  );
 }
 
 function tropicalLongitude(body: Body, date: Date) {
@@ -504,11 +507,10 @@ export function calculateChart(input: BirthInput): ChartResult {
 }
 
 export function formatDegrees(value: number) {
-  const normalized = normalize(value);
-  const degrees = Math.floor(normalized);
-  const minutesFloat = (normalized - degrees) * 60;
-  const minutes = Math.floor(minutesFloat);
-  const seconds = Math.round((minutesFloat - minutes) * 60);
+  const totalArcseconds = Math.round(normalize(value) * 3600) % (360 * 3600);
+  const degrees = Math.floor(totalArcseconds / 3600);
+  const minutes = Math.floor((totalArcseconds % 3600) / 60);
+  const seconds = totalArcseconds % 60;
   return `${String(degrees).padStart(2, "0")}° ${String(minutes).padStart(2, "0")}′ ${String(seconds).padStart(2, "0")}″`;
 }
 

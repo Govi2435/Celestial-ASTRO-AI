@@ -11,14 +11,14 @@
     "build": "bash scripts/build-verified.sh",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run test:unit && npm run build && node --test tests/rendered-html.test.mjs",
-    "test:unit": "node --experimental-strip-types --test tests/timezone.test.ts",
+    "test:unit": "node --experimental-strip-types --test tests/timezone.test.ts tests/engine-reference.test.ts",
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },
   "dependencies": {
     "@photostructure/tz-lookup": "11.6.0",
-    "astronomy-engine": "^2.1.19",
+    "astronomy-engine": "2.1.19",
     "drizzle-orm": "0.45.2",
     "moment-timezone": "0.6.3",
     "next": "16.2.6",
@@ -44,5 +44,5 @@
     "wrangler": "4.92.0"
   },
   "type": "module",
-  "displayName": "CosmicSphere"
+  "displayName": "Celestial ASTRO AI"
 }

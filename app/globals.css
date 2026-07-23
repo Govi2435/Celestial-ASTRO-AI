@@ -318,10 +318,10 @@ a { color: inherit; text-decoration: none; }
 .scope-section li { color: #7e899f; font-size: 9px; }
 .scope-section li::before { content: "✓"; margin-right: 9px; color: #4eb378; }
 .scope-section .not-calculated li::before { content: "—"; color: #aa6d78; }
-.license-note { max-width: 1244px; margin: 0 auto 80px; padding: 18px 22px; display: flex; align-items: center; gap: 14px; border: 1px solid rgba(245,197,66,.14); border-radius: 12px; background: rgba(245,197,66,.025); }
-.license-note > svg { flex: 0 0 auto; color: var(--gold); }
-.license-note strong { color: #c8b574; font-family: "Cinzel", serif; font-size: 11px; font-weight: 500; }
-.license-note p { margin: 4px 0 0; color: #6f6a5a; font-size: 8px; line-height: 1.6; }
+.trust-note { max-width: 1244px; margin: 0 auto 80px; padding: 18px 22px; display: flex; align-items: center; gap: 14px; border: 1px solid rgba(6,182,212,.14); border-radius: 12px; background: rgba(6,182,212,.025); }
+.trust-note > svg { flex: 0 0 auto; color: var(--cyan); }
+.trust-note strong { color: #8fcbd7; font-family: "Cinzel", serif; font-size: 11px; font-weight: 500; }
+.trust-note p { margin: 4px 0 0; color: #657786; font-size: 8px; line-height: 1.6; }
 footer { max-width: 1450px; min-height: 150px; margin: 0 auto; padding: 35px 28px 48px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 35px; border-top: 1px solid var(--stroke); }
 footer .brand { min-width: auto; }
 footer > p { color: #667088; font-family: Georgia, serif; font-size: 9px; font-style: italic; }
