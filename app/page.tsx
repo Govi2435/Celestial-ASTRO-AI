@@ -21,6 +21,7 @@ import {
   INTERPRETATION_PROFILE,
   type InterpretationReport,
 } from "./interpretation";
+import type { AskMyChartAnswer } from "./ask-my-chart";
 
 type ChartMode = "North Indian" | "South Indian" | "Zodiac Wheel";
 
@@ -442,7 +443,7 @@ function InterpretationPanel({ report }: { report: InterpretationReport }) {
         </div>
         <div>
           <span>AI STATUS</span>
-          <strong>Open-ended answers gated</strong>
+          <strong>Grounded answers active</strong>
         </div>
         <a href="/api/interpretation-profile" target="_blank" rel="noreferrer">
           Inspect profile ↗
@@ -454,6 +455,208 @@ function InterpretationPanel({ report }: { report: InterpretationReport }) {
           <li key={item}>{item}</li>
         ))}
       </ul>
+    </article>
+  );
+}
+
+const ASK_SUGGESTIONS = [
+  "Give me an evidence-based chart overview.",
+  "How does this chart describe communication?",
+  "What themes shape career decisions?",
+  "What does the current cycle emphasize?",
+];
+
+function AskMyChartPanel({
+  report,
+  calculation,
+}: {
+  report: InterpretationReport;
+  calculation: CalculationRequest;
+}) {
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState<AskMyChartAnswer | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState("");
+
+  async function askQuestion(nextQuestion: string) {
+    const cleanQuestion = nextQuestion.trim();
+    if (!cleanQuestion) {
+      setAskError("Enter a question about this calculated chart.");
+      return;
+    }
+    setAsking(true);
+    setAskError("");
+    try {
+      const response = await fetch("/api/ask-my-chart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: cleanQuestion, calculation }),
+      });
+      const payload = (await response.json()) as AskMyChartAnswer & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "The chart question could not be answered.");
+      setAnswer(payload);
+    } catch (caught) {
+      setAnswer(null);
+      setAskError(caught instanceof Error ? caught.message : "The chart question could not be answered.");
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  function submitQuestion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void askQuestion(question);
+  }
+
+  return (
+    <article className="ask-chart-lab glass-panel" id="ask-my-chart">
+      <div className="ask-chart-heading">
+        <div>
+          <span className="eyebrow">P4 • GROUNDED ASK MY CHART</span>
+          <h3>Ask the evidence, not a fortune teller.</h3>
+          <p>
+            Each question recalculates the same verified chart, then uses only approved P4 rules. No generative model, saved chat,
+            hidden prompt, or invented placement.
+          </p>
+        </div>
+        <div className="ask-engine-badge">
+          <span className="live-dot" />
+          Evidence router active
+        </div>
+      </div>
+
+      <form className="ask-chart-form" onSubmit={submitQuestion}>
+        <label htmlFor="chart-question">Question about this chart</label>
+        <div>
+          <input
+            id="chart-question"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            maxLength={400}
+            placeholder="Example: What themes shape career decisions?"
+            autoComplete="off"
+          />
+          <button type="submit" disabled={asking}>
+            <Sparkle size={14} />
+            {asking ? "Checking evidence…" : "Ask my chart"}
+          </button>
+        </div>
+        <small>{question.length}/400 • questions and answers are not stored</small>
+      </form>
+
+      <div className="ask-suggestions" aria-label="Supported chart questions">
+        {ASK_SUGGESTIONS.map((suggestion) => (
+          <button
+            type="button"
+            key={suggestion}
+            disabled={asking}
+            onClick={() => {
+              setQuestion(suggestion);
+              void askQuestion(suggestion);
+            }}
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+
+      {askError && (
+        <p className="ask-error" role="alert">
+          {askError}
+        </p>
+      )}
+
+      <div className="ask-answer-region" aria-live="polite" aria-busy={asking}>
+        {!answer ? (
+          <div className="ask-idle">
+            <span aria-hidden="true">✦</span>
+            <p>
+              <strong>Ready for an evidence check.</strong>
+              Answers are limited to {report.insights.length} approved chart rules linked to receipt {report.chartId}.
+            </p>
+          </div>
+        ) : (
+          <section className={`ask-answer ${answer.status}`}>
+            <div className="ask-answer-topline">
+              <span className={`ask-status ${answer.status}`}>
+                {answer.status === "answered"
+                  ? "Grounded answer"
+                  : answer.status === "limited"
+                    ? "Limited evidence"
+                    : answer.status === "refused"
+                      ? "Safety refusal"
+                      : "Not supported"}
+              </span>
+              <code>{answer.intent}</code>
+            </div>
+            <h4>{answer.title}</h4>
+            <p className="ask-answer-copy">{answer.answer}</p>
+            <p className="ask-disclosure">{answer.disclosure}</p>
+
+            {answer.evidence.length > 0 && (
+              <details className="ask-evidence" open>
+                <summary>
+                  Evidence used
+                  <span>
+                    {answer.grounding.evidenceCount} factors • {answer.grounding.ruleIds.length} rules
+                  </span>
+                </summary>
+                <div className="ask-evidence-groups">
+                  {answer.evidence.map((insight) => (
+                    <section key={insight.id}>
+                      <div>
+                        <span>{insight.category}</span>
+                        <code>{insight.ruleId}</code>
+                      </div>
+                      <strong>{insight.title}</strong>
+                      <ul>
+                        {insight.evidence.map((item) => (
+                          <li key={`${insight.id}-${item.id}`}>
+                            <span className={`evidence-kind ${item.kind}`}>{item.kind}</span>
+                            <p>
+                              <b>{item.label}</b>
+                              <em>{item.value}</em>
+                              <code>{item.sourcePath}</code>
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            <div className="ask-limitations">
+              <span>Limits kept active</span>
+              <ul>
+                {answer.limitations.map((limitation) => (
+                  <li key={limitation}>{limitation}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="ask-answer-footer">
+              <span>
+                Receipt <code>{answer.chartId}</code>
+              </span>
+              <span>
+                Engine <code>{answer.profileId}</code>
+              </span>
+              <span>No generative model</span>
+            </div>
+          </section>
+        )}
+      </div>
+
+      <div className="ask-contract">
+        <span>SUPPORTED</span>
+        <p>Overview • identity • emotions • communication • drive • current cycle • career reflection</p>
+        <span>BLOCKED</span>
+        <p>Guaranteed events • high-stakes advice • hidden evidence • unapproved compatibility claims</p>
+        <a href="/api/ask-my-chart" target="_blank" rel="noreferrer">
+          Inspect answer profile ↗
+        </a>
+      </div>
     </article>
   );
 }
@@ -532,6 +735,7 @@ function UnknownTimePanel({ result }: { result: UnknownCalculationResult }) {
 
 export default function Home() {
   const [result, setResult] = useState<CalculationResult | null>(null);
+  const [calculationInput, setCalculationInput] = useState<CalculationRequest | null>(null);
   const [mode, setMode] = useState<ChartMode>("North Indian");
   const [error, setError] = useState("");
   const [calculating, setCalculating] = useState(false);
@@ -618,8 +822,10 @@ export default function Home() {
         }));
       }
       setResult(payload);
+      setCalculationInput(input);
     } catch (caught) {
       setResult(null);
+      setCalculationInput(null);
       setError(caught instanceof Error ? caught.message : "The calculation could not be completed.");
     } finally {
       setCalculating(false);
@@ -742,13 +948,14 @@ export default function Home() {
           <a className="active" href="#calculator">
             Calculator
           </a>
+          <a href="#ask-my-chart">Ask My Chart</a>
           <a href="#interpretations">Evidence</a>
           <a href="#method">Method</a>
           <a href="#certification">Certification</a>
           <a href="#scope">Scope</a>
         </nav>
         <div className="header-actions">
-          <span className="observatory-edition">P4 Evidence</span>
+          <span className="observatory-edition">P4 Grounded Q&amp;A</span>
           <div className="local-badge">
             <span className="live-dot" />
             Server calculation • no saved birth data
@@ -759,7 +966,7 @@ export default function Home() {
       <section className="observatory-hero">
         <div className="hero-copy">
           <span className="accuracy-pill">
-            <Sparkle size={13} /> P2 certificate passed • P4 evidence active
+            <Sparkle size={13} /> P2 certificate passed • grounded chart answers active
           </span>
           <h1>
             Your sky,
@@ -1065,6 +1272,9 @@ export default function Home() {
             <>
               <UnknownTimePanel result={result} />
               {interpretation && <InterpretationPanel report={interpretation} />}
+              {interpretation && calculationInput && (
+                <AskMyChartPanel key={interpretation.chartId} report={interpretation} calculation={calculationInput} />
+              )}
             </>
           ) : chart ? (
             <>
@@ -1171,6 +1381,9 @@ export default function Home() {
               </div>
 
               {interpretation && <InterpretationPanel report={interpretation} />}
+              {interpretation && calculationInput && (
+                <AskMyChartPanel key={interpretation.chartId} report={interpretation} calculation={calculationInput} />
+              )}
 
               <article className="planet-card glass-panel">
                 <div className="section-title">
@@ -1302,6 +1515,14 @@ export default function Home() {
               confidence state, and limitation. Unsupported readings are blocked instead of improvised.
             </p>
           </article>
+          <article>
+            <span>06</span>
+            <h3>Grounded chart questions</h3>
+            <p>
+              Ask My Chart recalculates from the verified inputs and assembles answers only from approved P4 evidence. Unsupported
+              questions and prediction requests are labelled instead of answered generically.
+            </p>
+          </article>
         </div>
       </section>
 
@@ -1384,6 +1605,7 @@ export default function Home() {
             <li>Approximate-time stability and unknown-time ranges</li>
             <li>P2 reference-chart regression certificate on every release</li>
             <li>P4 deterministic interpretations with visible evidence and rule IDs</li>
+            <li>Grounded Ask My Chart answers with receipt-linked source factors</li>
           </ul>
         </div>
         <div className="not-calculated">
@@ -1394,7 +1616,7 @@ export default function Home() {
             <li>KP cuspal sub-lords and all D1–D60 Vargas</li>
             <li>Location-aware Muhurta start and end times</li>
             <li>Ashtakoota or Dashakoota compatibility scores</li>
-            <li>Open-ended or predictive AI chat</li>
+            <li>Unrestricted, generative, or predictive AI chat</li>
             <li>Chart Story Mode, compatibility, and creative chart artwork</li>
             <li>True-node and alternate ayanamsa profiles</li>
             <li>Accuracy claims beyond the documented kernel target and pinned reference set</li>
@@ -1409,8 +1631,8 @@ export default function Home() {
           <strong>Free MIT accuracy route • P2 certified • P4 evidence contract active</strong>
           <p>
             Every chart identifies the engine, kernel, licence, method IDs, timezone data, NASA/JPL reference profile, and P2
-            certificate used. Every traditional interpretation links back to chart evidence. Neither layer is a claim of perfect
-            prediction.
+            certificate used. Every traditional interpretation and supported chart answer links back to visible evidence. No layer is
+            a claim of perfect prediction.
           </p>
         </div>
       </section>

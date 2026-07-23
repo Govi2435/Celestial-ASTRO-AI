@@ -58,7 +58,7 @@ export const INTERPRETATION_PROFILE = {
     "Unknown birth time suppresses Ascendant, house, and exact Dasha interpretations.",
     "Approximate birth time marks affected interpretations as limited.",
     "No guaranteed events, fear-based language, or medical, legal, or financial certainty.",
-    "Open-ended AI answers remain disabled until they can be constrained to this evidence contract.",
+    "Ask My Chart answers may use only approved insights that satisfy this evidence contract.",
   ],
 } as const;
 
