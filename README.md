@@ -1,108 +1,77 @@
-# vinext-starter
+# Celestial ASTRO AI
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+> Your chart. Calculated, explained, understood.
 
-## Prerequisites
+Celestial ASTRO AI is a trust-first astrology platform designed around
+reproducible astronomical calculations, transparent astrological methods, and
+explainable AI.
+
+The product does **not** promise scientifically proven or guaranteed
+predictions. It separates calculated chart data from traditional
+interpretation, AI-generated explanation, and results limited by uncertain
+input.
+
+## Product status
+
+The project is currently at **P0: Trust Contract and Product Boundaries**.
+
+P1 engineering must not begin until the P0 contract and initial calculation
+profile are approved.
+
+| Phase | Outcome | Status |
+| --- | --- | --- |
+| P0 | Trust contract and product boundaries | Proposed for approval |
+| P1 | Professional ephemeris and birth-data pipeline | Blocked by P0 |
+| P2 | Reference tests and calculation receipt | Planned |
+| P3 | Celestial Observatory customer experience | Planned |
+| P4 | Explainable AI and creative chart experiences | Planned |
+| P5 | Revenue and professional astrologer platform | Planned |
+
+## P0 documents
+
+- [Trust Contract](docs/P0_TRUST_CONTRACT.md)
+- [Calculation Profile V1](docs/CALCULATION_PROFILE_V1.md)
+- [Evidence and Language Policy](docs/EVIDENCE_LANGUAGE_POLICY.md)
+- [Calculation Receipt Specification](docs/CALCULATION_RECEIPT_SPEC.md)
+- [P0 Approval Checklist](docs/P0_APPROVAL_CHECKLIST.md)
+
+## Current prototype
+
+The current prototype calculates chart data in the browser with Astronomy
+Engine and a documented mean-Lahiri approximation. It is not presented as
+Swiss Ephemeris output.
+
+P1 will replace this prototype calculation path with a versioned professional
+backend after the Swiss Ephemeris licensing route is selected.
+
+Live prototype:
+[cosmicsphere.govinda2x7.chatgpt.site](https://cosmicsphere.govinda2x7.chatgpt.site)
+
+## P1 licensing gate
+
+Swiss Ephemeris uses a dual-licensing model: AGPL or a professional licence.
+The project must select and document one route before a public service using
+Swiss Ephemeris is activated.
+
+Official reference:
+[Astrodienst Swiss Ephemeris](https://www.astro.com/swisseph/swephinfo_e.htm)
+
+## Development
+
+Requirements:
 
 - Node.js `>=22.13.0`
 - Linux with `flock`, `curl`, and GNU `timeout`
 
-## Sites Lifecycle
+Common commands:
 
-The Sites lifecycle CLI runs the locked dependency install before returning this checkout. Edit the source under `app/`, then checkpoint when a coherent milestone is ready to inspect or share. The remote Sites builder runs `npm run build` against the pushed commit. Do not repeat install or build as a normal pre-checkpoint step.
-
-This starter does not use `wrangler.jsonc`.
-
-`install:ci` is intentionally a single, non-retrying `npm ci`. It refuses a concurrent install for the same project, consumes a matching image-seeded npm cache with `--prefer-offline` while retaining registry fallback for a missing cache object, otherwise downloads and verifies the complete vinext tarball recorded in `package-lock.json`, limits npm to one socket, and terminates a stalled install. `build` applies a short timeout and then validates the Sites artifact. These helpers target Linux and use GNU `timeout`; they are not native macOS scripts.
-
-Scripts that need writable project-scoped home, npm, XDG, and temporary paths use `scripts/sites-env.sh`. The `dev` and `start` scripts honor the caller's runtime environment and keep Wrangler logs inside the checkout. The generated `.sites-runtime/` directory is disposable and ignored by Git.
-
-## Included Shape
-
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run install:ci
+npm run dev
+npm run build
+npm test
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Diagnostic Commands
-
-- `npm run install:ci`: perform the one bounded lockfile install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build and validate the deployable Sites artifact
-- `npm run start`: start the built Vinext application
-- `npm test`: build, validate, and verify the rendered development-preview metadata
-- `npm run validate:artifact`: recheck an existing artifact's manifest and ESM `default.fetch` export
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-Use build and validation commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
-
-The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+The project uses Vinext and is configured for its existing Sites deployment.
+Generated dependencies, build output, runtime state, and environment files are
+not committed.
