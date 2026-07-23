@@ -768,12 +768,68 @@ function UnknownTimePanel({ result }: { result: UnknownCalculationResult }) {
   );
 }
 
+function PremiumReportPanel({
+  result,
+  report,
+  generating,
+  error,
+  onDownload,
+}: {
+  result: CalculationResult;
+  report: InterpretationReport;
+  generating: boolean;
+  error: string;
+  onDownload: () => void;
+}) {
+  const timed = result.kind === "timed";
+  return (
+    <article className="premium-report-card glass-panel" id="premium-report">
+      <div className="report-orbit" aria-hidden="true">
+        <span>P5</span>
+        <i />
+        <i />
+      </div>
+      <div className="premium-report-copy">
+        <span className="eyebrow">P5 • PREMIUM PDF REPORT</span>
+        <h3>Your chart, designed as a private observatory folio.</h3>
+        <p>
+          The server recalculates your birth details, rebuilds the approved evidence, and creates a receipt-linked PDF. Browser
+          placements are never trusted and the generated file is not stored.
+        </p>
+        <div className="report-inclusions" aria-label="Premium report contents">
+          <span>{timed ? "Celestial fingerprint" : "Date-range facts"}</span>
+          <span>{timed ? `${report.insights.length} evidence-linked readings` : "Unknown-time suppression"}</span>
+          <span>Calculation receipt</span>
+          <span>Honest limitations</span>
+        </div>
+      </div>
+      <div className="premium-report-action">
+        <span className="report-format">PDF • A4</span>
+        <strong>{timed ? "Premium natal report" : "Premium date-range report"}</strong>
+        <small>Midnight observatory edition</small>
+        <button type="button" onClick={onDownload} disabled={generating}>
+          <Sparkle size={14} />
+          {generating ? "Building report…" : "Download premium PDF"}
+        </button>
+        <code>{result.receipt.chartId}</code>
+      </div>
+      {error && (
+        <p className="report-error" role="alert">
+          {error}
+        </p>
+      )}
+    </article>
+  );
+}
+
 export default function Home() {
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [calculationInput, setCalculationInput] = useState<CalculationRequest | null>(null);
   const [mode, setMode] = useState<ChartMode>("North Indian");
   const [error, setError] = useState("");
   const [calculating, setCalculating] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [reportError, setReportError] = useState("");
   const [searching, setSearching] = useState(false);
   const [placeQuery, setPlaceQuery] = useState("");
   const [places, setPlaces] = useState<PlaceResult[]>([]);
@@ -858,6 +914,7 @@ export default function Home() {
       }
       setResult(payload);
       setCalculationInput(input);
+      setReportError("");
     } catch (caught) {
       setResult(null);
       setCalculationInput(null);
@@ -867,7 +924,7 @@ export default function Home() {
     }
   }
 
-  function downloadReport() {
+  function downloadRawData() {
     if (!result) return;
     if (result.kind === "unknown") {
       const report = [
@@ -959,6 +1016,38 @@ export default function Home() {
     link.download = "celestial-astro-ai-calculated-chart.txt";
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function downloadPremiumReport() {
+    if (!calculationInput) return;
+    setGeneratingPdf(true);
+    setReportError("");
+    try {
+      const response = await fetch("/api/premium-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ calculation: calculationInput }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error || "The premium report could not be generated.");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1] ?? "celestial-astro-ai-premium-report.pdf";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setReportError(caught instanceof Error ? caught.message : "The premium report could not be generated.");
+    } finally {
+      setGeneratingPdf(false);
+    }
   }
 
   return (
@@ -1296,9 +1385,18 @@ export default function Home() {
                   : "Nothing below is populated with sample data."}
               </p>
             </div>
-            <button className="outline-button" onClick={downloadReport} disabled={!result}>
-              ⇩ &nbsp; Download data
-            </button>
+            <div className="result-actions">
+              <button
+                className="report-toolbar-button"
+                onClick={() => void downloadPremiumReport()}
+                disabled={!calculationInput || generatingPdf}
+              >
+                <Sparkle size={13} /> {generatingPdf ? "Building PDF…" : "Premium PDF"}
+              </button>
+              <button className="outline-button" onClick={downloadRawData} disabled={!result}>
+                ⇩ &nbsp; Raw data
+              </button>
+            </div>
           </div>
 
           {!result ? (
@@ -1306,6 +1404,15 @@ export default function Home() {
           ) : result.kind === "unknown" ? (
             <>
               <UnknownTimePanel result={result} />
+              {interpretation && (
+                <PremiumReportPanel
+                  result={result}
+                  report={interpretation}
+                  generating={generatingPdf}
+                  error={reportError}
+                  onDownload={() => void downloadPremiumReport()}
+                />
+              )}
               {interpretation && <InterpretationPanel report={interpretation} />}
               {interpretation && calculationInput && (
                 <AskMyChartPanel key={interpretation.chartId} report={interpretation} calculation={calculationInput} />
@@ -1373,6 +1480,16 @@ export default function Home() {
                   </div>
                 </div>
               </article>
+
+              {interpretation && (
+                <PremiumReportPanel
+                  result={result}
+                  report={interpretation}
+                  generating={generatingPdf}
+                  error={reportError}
+                  onDownload={() => void downloadPremiumReport()}
+                />
+              )}
 
               <div className="fact-grid">
                 <article className="fact-card glass-panel">
@@ -1642,7 +1759,8 @@ export default function Home() {
             <li>P4 deterministic interpretations with visible evidence and rule IDs</li>
             <li>Approved career pack using the 10th house, its traditional lord, Sun, Saturn, Jupiter, Mercury, and Mars</li>
             <li>Approved relationship pack using the 7th house, its traditional lord, Venus, Moon, and visible limitations</li>
-            <li>Grounded Ask My Chart answers with receipt-linked source factors</li>
+              <li>Grounded Ask My Chart answers with receipt-linked source factors</li>
+              <li>Private, server-recalculated premium PDF with chart evidence and receipt</li>
           </ul>
         </div>
         <div className="not-calculated">
@@ -1654,7 +1772,7 @@ export default function Home() {
             <li>Location-aware Muhurta start and end times</li>
             <li>Ashtakoota, Dashakoota, or unexplained compatibility scores</li>
             <li>Unrestricted, generative, or predictive AI chat</li>
-            <li>Chart Story Mode, compatibility, and creative chart artwork</li>
+            <li>Chart Story Mode, compatibility, and standalone creative chart artwork</li>
             <li>True-node and alternate ayanamsa profiles</li>
             <li>Accuracy claims beyond the documented kernel target and pinned reference set</li>
             <li>Third-party accreditation or scientific validation of astrology</li>
@@ -1665,7 +1783,7 @@ export default function Home() {
       <section className="trust-note">
         <Sparkle />
         <div>
-          <strong>Free MIT accuracy route • P2 certified • P4 evidence contract active</strong>
+          <strong>Free MIT accuracy route • P2 certified • P4 evidence contract • P5 premium report</strong>
           <p>
             Every chart identifies the engine, kernel, licence, method IDs, timezone data, NASA/JPL reference profile, and P2
             certificate used. Every traditional interpretation and supported chart answer links back to visible evidence. No layer is
