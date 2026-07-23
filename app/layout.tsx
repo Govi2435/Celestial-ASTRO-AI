@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Celestial ASTRO AI — Transparent Birth Chart Calculator",
+  title: "Celestial ASTRO AI — Premium Calculation Observatory",
   description:
-    "Input-driven Vedic chart calculations with historical timezone resolution, visible methods, and no random readings.",
+    "A premium Vedic calculation observatory with verified birth data, historical timezone resolution, visible methods, and no random readings.",
   other: {
     "codex-preview": "development",
   },
