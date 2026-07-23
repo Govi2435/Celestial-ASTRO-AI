@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useId, useState } from "react";
 import { CERTIFICATION_PROFILE } from "./certification-profile";
 import {
   ChartResult,
@@ -77,18 +77,19 @@ function Sparkle({ size = 18 }: { size?: number }) {
 }
 
 function MoonLogo() {
+  const gradientId = useId();
   return (
     <span className="logo-mark" aria-hidden="true">
       <svg viewBox="0 0 44 44">
         <defs>
-          <linearGradient id="moonGlow" x1="0" x2="1">
+          <linearGradient id={gradientId} x1="0" x2="1">
             <stop stopColor="#F5C542" />
             <stop offset="1" stopColor="#FFE993" />
           </linearGradient>
         </defs>
         <path
           d="M29.8 32.4A15 15 0 0 1 13.2 9.1 15.5 15.5 0 1 0 34.9 28a15.2 15.2 0 0 1-5.1 4.4Z"
-          fill="url(#moonGlow)"
+          fill={`url(#${gradientId})`}
         />
         <circle cx="31.5" cy="10.5" r="1.8" fill="#8B5CF6" />
         <path
@@ -612,14 +613,20 @@ export default function Home() {
 
   return (
     <main className="app-shell">
+      <a className="skip-link" href="#calculator">
+        Skip to calculator
+      </a>
       <div className="aurora aurora-one" />
       <div className="aurora aurora-two" />
 
       <header className="topbar">
         <a className="brand" href="#" aria-label="Celestial ASTRO AI home">
           <MoonLogo />
-          <span>
-            <strong>Celestial</strong> ASTRO AI
+          <span className="brand-copy">
+            <span>
+              <strong>Celestial</strong> ASTRO AI
+            </span>
+            <small>Calculation Observatory</small>
           </span>
         </a>
         <nav className="desktop-nav" aria-label="Main navigation">
@@ -630,26 +637,96 @@ export default function Home() {
           <a href="#certification">Certification</a>
           <a href="#scope">Scope</a>
         </nav>
-        <div className="local-badge">
-          <span className="live-dot" />
-          Server calculation • no saved birth data
+        <div className="header-actions">
+          <span className="observatory-edition">P3 Observatory</span>
+          <div className="local-badge">
+            <span className="live-dot" />
+            Server calculation • no saved birth data
+          </div>
         </div>
       </header>
 
-      <section className="intro-band">
-        <div>
+      <section className="observatory-hero">
+        <div className="hero-copy">
           <span className="accuracy-pill">
-            <Sparkle size={13} /> P2 reference chart certification passed
+            <Sparkle size={13} /> P2 certificate passed • MIT engine
           </span>
           <h1>
-            Your chart, calculated and
-            <em> fully traceable.</em>
+            Your sky,
+            <em> calculated with receipts.</em>
           </h1>
+          <p>
+            A premium Vedic calculation observatory built around verified birth data, historical timezone resolution, and methods you
+            can inspect. No random placements. No invented certainty.
+          </p>
+          <div className="hero-actions">
+            <a className="hero-primary" href="#calculator">
+              Open the observatory <span>↘</span>
+            </a>
+            <a className="hero-secondary" href="#certification">
+              Inspect certification
+            </a>
+          </div>
+          <div className="hero-assurances" aria-label="Product assurances">
+            <span>
+              <b>01</b> Birth data stays unsaved
+            </span>
+            <span>
+              <b>02</b> Unknown time stays unknown
+            </span>
+            <span>
+              <b>03</b> Every result is traceable
+            </span>
+          </div>
         </div>
-        <p>
-          Search the birthplace, confirm the recorded time, and receive historical timezone conversion with an auditable Calculation
-          Receipt. Unknown time stays unknown—never invented.
-        </p>
+
+        <aside className="observatory-console" aria-label="Engine certification status">
+          <div className="console-topline">
+            <span>CELESTIAL OBSERVATORY / LIVE</span>
+            <span className="console-live">
+              <i /> Operational
+            </span>
+          </div>
+          <div className="orbital-instrument" aria-hidden="true">
+            <span className="orbit orbit-one" />
+            <span className="orbit orbit-two" />
+            <span className="orbit orbit-three" />
+            <span className="instrument-axis axis-horizontal" />
+            <span className="instrument-axis axis-vertical" />
+            <span className="instrument-core">
+              <MoonLogo />
+              <small>MIT</small>
+            </span>
+            <i className="orbit-body body-one" />
+            <i className="orbit-body body-two" />
+            <b>N</b>
+            <b>E</b>
+            <b>S</b>
+            <b>W</b>
+          </div>
+          <div className="console-metrics">
+            <div>
+              <span>Engine profile</span>
+              <strong>Celestial MIT v1</strong>
+            </div>
+            <div>
+              <span>Reference delta</span>
+              <strong>0.190′ max</strong>
+            </div>
+            <div>
+              <span>Reference charts</span>
+              <strong>5 / Passed</strong>
+            </div>
+            <div>
+              <span>Receipt schema</span>
+              <strong>v3 / Active</strong>
+            </div>
+          </div>
+          <div className="console-footer">
+            <code>{CERTIFICATION_PROFILE.certificateId}</code>
+            <span>Transparent by design</span>
+          </div>
+        </aside>
       </section>
 
       <section className="calculator-shell" id="calculator">
@@ -848,7 +925,7 @@ export default function Home() {
           </form>
         </aside>
 
-        <section className="result-panel">
+        <section className="result-panel" aria-live="polite">
           <div className="result-toolbar">
             <div>
               <span className="eyebrow">CALCULATION OUTPUT</span>
