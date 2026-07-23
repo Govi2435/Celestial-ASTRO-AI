@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Celestial ASTRO AI — Explainable Calculation Observatory",
   description:
-    "A premium Vedic calculation observatory with verified birth data, visible calculation receipts, and traditional interpretations linked to exact chart evidence.",
+    "A premium Vedic calculation observatory with submitted birth details, visible calculation receipts, and traditional interpretations linked to calculated chart evidence.",
   other: {
     "codex-preview": "development",
   },

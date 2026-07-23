@@ -143,7 +143,7 @@ function formatAngle(value: number) {
 
 function displayName(result: CalculationResult) {
   const name = result.kind === "timed" ? result.chart.input.name : result.input.name;
-  return safeText(name) || "Private chart";
+  return safeText(name) || "Unnamed chart";
 }
 
 function drawOrbitDecoration(page: PDFPage, centerX: number, centerY: number, radius: number) {
@@ -315,7 +315,7 @@ function drawMetricCard(
 }
 
 function drawCover(context: ReportContext) {
-  const page = addPage(context, "Premium Natal Report", "P5 verified report");
+  const page = addPage(context, "Premium Natal Report", "P5 receipt-linked report");
   drawOrbitDecoration(page, 455, 660, 94);
   page.drawText("PREMIUM NATAL REPORT", {
     x: MARGIN,
@@ -331,7 +331,7 @@ function drawCover(context: ReportContext) {
     font: context.fonts.serif,
     color: COLORS.ivory,
   });
-  page.drawText(context.result.kind === "timed" ? "A calculated celestial profile" : "A verified date-range profile", {
+  page.drawText(context.result.kind === "timed" ? "A calculated celestial profile" : "A date-range profile with unknown-time suppression", {
     x: MARGIN,
     y: 615,
     size: 13,
@@ -341,7 +341,7 @@ function drawCover(context: ReportContext) {
   drawWrappedText(
     page,
     context.result.kind === "timed"
-      ? "Astronomical positions, traditional Jyotish interpretations, and every supporting chart factor - separated, linked, and receipt-verified."
+      ? "Astronomical positions, traditional Jyotish interpretations, and every supporting chart factor - separated, linked, and receipt-linked."
       : "The birth time was not invented. This report preserves date-wide astronomical facts and clearly suppresses time-dependent claims.",
     MARGIN,
     577,
@@ -957,8 +957,8 @@ function receiptRows(receipt: CalculationReceipt) {
     ["Astronomy kernel", `${receipt.kernel} | ${receipt.kernelLicense}`],
     ["Reference validation", receipt.validationSummary],
     ["Validation profile", receipt.validationProfile],
-    ["P2 certificate", `${receipt.certificationId} | ${receipt.certificationStatus}`],
-    ["Certified coverage", receipt.certificationSummary],
+    ["P2 internal validation", `${receipt.certificationId} | ${receipt.certificationStatus}`],
+    ["Validated coverage", receipt.certificationSummary],
     ["Calculated at", receipt.calculatedAt],
     ["Input fingerprint", receipt.inputFingerprint],
   ];
@@ -971,7 +971,7 @@ function drawReceipt(context: ReportContext) {
     page,
     "Transparent calculation",
     "Your calculation receipt",
-    "These versioned fields identify the input conversion, method profile, active astronomy engine, and reference-certificate coverage used for this report.",
+    "These versioned fields identify the input conversion, method profile, active astronomy engine, and internal reference-validation coverage used for this report.",
   );
   const rows = receiptRows(context.result.receipt);
   let y = 656;
@@ -1016,7 +1016,7 @@ function drawReceipt(context: ReportContext) {
     font: context.fonts.bodyBold,
     color: COLORS.ivory,
   });
-  page.drawText("This certificate covers calculation reproducibility. It does not scientifically validate astrology.", {
+  page.drawText("This internal validation record covers calculation reproducibility only; it is not external accreditation or scientific validation of astrology.", {
     x: MARGIN + 31,
     y: 86,
     size: 6.2,
@@ -1063,7 +1063,7 @@ function drawClosingPage(context: ReportContext) {
     "Historical timezone and UTC normalization",
     "Birth-time confidence and suppression rules",
     "Approved evidence-linked Jyotish interpretation",
-    "Versioned calculation receipt and P2 certificate",
+    "Versioned calculation receipt and internal P2 validation record",
   ];
   const excluded = [
     "Guaranteed events or perfect prediction claims",
@@ -1132,7 +1132,7 @@ export const PREMIUM_REPORT_PROFILE = {
   schema: "premium-report-v1",
   status: "Active",
   format: "application/pdf",
-  privacy: "Generated on demand and not stored",
+  privacy: "Generated on demand, returned directly, and not stored by the current route; account, ownership, and entitlement protection are not active in P5",
   sections: [
     "Cover and trust contract",
     "Chart overview or unknown-time date range",

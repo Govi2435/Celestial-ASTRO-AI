@@ -2,7 +2,7 @@
 
 > Your chart. Calculated, explained, understood.
 
-Celestial ASTRO AI is a trust-first astrology intelligence platform built around reproducible astronomical calculations, honest birth-time uncertainty handling, evidence-linked traditional interpretations, private reports, and consent-aware product foundations.
+Celestial ASTRO AI is a trust-first astrology intelligence platform built around reproducible astronomical calculations, honest birth-time uncertainty handling, evidence-linked traditional interpretations, server-generated direct-download reports, and consent-aware product foundations.
 
 The project separates:
 
@@ -23,10 +23,10 @@ The customer-facing calculation and interpretation experience is substantially a
 | --- | --- | --- |
 | P0 | Trust contract, evidence policy, calculation profile, and product boundaries | Complete |
 | P1 | Server-side birth-data pipeline, timezone handling, and MIT calculation engine | Active |
-| P2 | Reference charts, NASA/JPL fixtures, regression tests, and calculation receipts | Active — internal certificate passed |
+| P2 | Reference charts, NASA/JPL fixtures, regression tests, and calculation receipts | Active — internal validation suite passed |
 | P3 | Premium Observatory interface and chart visualizations | Active |
 | P4 | Evidence-linked interpretations, career and relationship packs, and Ask My Chart | Active |
-| P5 | Private server-generated premium PDF report | Active, but not yet protected by account or subscription checks |
+| P5 | Server-generated direct-download premium PDF report | Active, but not yet protected by account or subscription checks |
 | P6 | Accounts, family profiles, consent, export, and deletion controls | Foundation only |
 | P7 | Plans, subscriptions, billing events, and premium entitlements | Foundation only |
 | P8 | Professional workspaces, cases, appointments, consent, and report delivery rules | Foundation only |
@@ -133,7 +133,7 @@ It suppresses:
 
 The system does not silently replace an unknown time with noon or another invented value.
 
-## Calculation Receipt and P2 certification
+## Calculation Receipt and P2 internal validation
 
 Every result includes a reproducibility receipt containing information such as:
 
@@ -152,11 +152,11 @@ Every result includes a reproducibility receipt containing information such as:
 - node profile;
 - engine and kernel versions;
 - validation profile; and
-- P2 certification metadata.
+- P2 internal-validation metadata.
 
 The chart ID is derived from the canonical calculation input, normalized time, calculation profile, engine fingerprint, and timezone-data version.
 
-The P2 certificate is an **internal reproducibility certificate**, not third-party accreditation. NASA/JPL comparisons validate the pinned planetary-position fixtures only; they do not validate astrological interpretations or guarantee predictions.
+The P2 validation record documents an **internal reproducibility suite**, not NASA certification or third-party accreditation. NASA/JPL comparisons validate the pinned planetary-position fixtures only; they do not validate astrological interpretations or guarantee predictions.
 
 Machine-readable method and certification data is available from `GET /api/certification`.
 

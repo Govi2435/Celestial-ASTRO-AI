@@ -9,7 +9,7 @@ export const ENGINE_PROFILE = {
   kernelLicense: "MIT",
   statedKernelAccuracy: "approximately ±1 arcminute",
   validationProfile: "jpl-horizons-de441-v1",
-  validationSummary: "20 NASA/JPL Horizons DE441 positions; max observed delta 0.190′",
+  validationSummary: "20 pinned NASA/JPL Horizons DE441 position fixtures; max observed delta 0.190′; internal comparison only, not NASA certification",
   referenceEpochs: ["2000-01-01T12:00:00Z", "2024-04-08T18:00:00Z"],
 } as const;
 
