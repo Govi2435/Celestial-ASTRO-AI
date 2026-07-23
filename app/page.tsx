@@ -16,6 +16,11 @@ import type {
   CalculationRequest,
   UnknownCalculationResult,
 } from "./calculation";
+import {
+  buildInterpretationReport,
+  INTERPRETATION_PROFILE,
+  type InterpretationReport,
+} from "./interpretation";
 
 type ChartMode = "North Indian" | "South Indian" | "Zodiac Wheel";
 
@@ -362,6 +367,97 @@ function ReceiptPanel({ receipt }: { receipt: CalculationReceipt }) {
   );
 }
 
+function InterpretationPanel({ report }: { report: InterpretationReport }) {
+  return (
+    <article className="interpretation-lab glass-panel" id="interpretations">
+      <div className="interpretation-heading">
+        <div>
+          <span className="eyebrow">P4 • EXPLAINABLE INTERPRETATION</span>
+          <h3>Traditional readings with visible evidence.</h3>
+          <p>{report.disclosure}</p>
+        </div>
+        <div className="interpretation-status">
+          <span className={`evidence-badge ${report.status === "limited" ? "limited" : "interpreted"}`}>
+            {report.status === "limited" ? "Limited evidence" : "Evidence linked"}
+          </span>
+          <small>{report.insights.length} approved rules</small>
+        </div>
+      </div>
+
+      {report.insights.length > 0 ? (
+        <div className="interpretation-grid">
+          {report.insights.map((insight) => (
+            <section className="interpretation-card" key={insight.id}>
+              <div className="interpretation-card-topline">
+                <span>{insight.category}</span>
+                <b className={insight.confidence}>
+                  {insight.confidence === "limited" ? "Check birth time" : "Supported"}
+                </b>
+              </div>
+              <h4>{insight.title}</h4>
+              <p>{insight.statement}</p>
+              <details className="evidence-drawer">
+                <summary>
+                  Why am I seeing this? <span>+</span>
+                </summary>
+                <div className="evidence-list">
+                  {insight.evidence.map((evidence) => (
+                    <div key={evidence.id}>
+                      <span className={`evidence-kind ${evidence.kind}`}>{evidence.kind}</span>
+                      <p>
+                        <small>{evidence.label}</small>
+                        <strong>{evidence.value}</strong>
+                        <code>{evidence.sourcePath}</code>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="interpretation-limitation">{insight.limitation}</p>
+                <code className="rule-id">{insight.ruleId}</code>
+              </details>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="interpretation-suppressed">
+          <span aria-hidden="true">⊘</span>
+          <div>
+            <h4>No time-dependent interpretation was generated.</h4>
+            <p>
+              The birth time is unknown, so the evidence contract blocks Ascendant, houses, and exact Dasha interpretation instead
+              of filling the gaps.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="interpretation-footer">
+        <div>
+          <span>RULE ENGINE</span>
+          <strong>{report.profileId}</strong>
+        </div>
+        <div>
+          <span>LINKED RECEIPT</span>
+          <strong>{report.chartId}</strong>
+        </div>
+        <div>
+          <span>AI STATUS</span>
+          <strong>Open-ended answers gated</strong>
+        </div>
+        <a href="/api/interpretation-profile" target="_blank" rel="noreferrer">
+          Inspect profile ↗
+        </a>
+      </div>
+
+      <ul className="interpretation-suppressed-list" aria-label="Suppressed interpretation claims">
+        {report.suppressed.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </article>
+  );
+}
+
 function UnknownTimePanel({ result }: { result: UnknownCalculationResult }) {
   return (
     <>
@@ -451,6 +547,7 @@ export default function Home() {
     provider: "Verified manual entry",
   });
   const chart = result?.kind === "timed" ? result.chart : null;
+  const interpretation = result ? buildInterpretationReport(result) : null;
 
   async function searchPlaces() {
     if (placeQuery.trim().length < 3) {
@@ -592,6 +689,18 @@ export default function Home() {
       `Birth Tithi: ${result.chart.tithi}`,
       `Birth Yoga: ${result.chart.yoga}`,
       "",
+      "EVIDENCE-LINKED TRADITIONAL INTERPRETATIONS",
+      ...(interpretation?.insights.flatMap((insight) => [
+        `${insight.category.toUpperCase()} — ${insight.title}`,
+        insight.statement,
+        `Evidence: ${insight.evidence.map((item) => `${item.label}: ${item.value}`).join(" • ")}`,
+        `Rule: ${insight.ruleId} • Confidence: ${insight.confidence}`,
+        `Limitation: ${insight.limitation}`,
+        "",
+      ]) ?? []),
+      `Interpretation profile: ${INTERPRETATION_PROFILE.id}`,
+      `Disclosure: ${interpretation?.disclosure ?? ""}`,
+      "",
       `Engine: ${result.receipt.engineName} ${result.receipt.engineVersion}`,
       `Kernel: ${result.receipt.kernel} • ${result.receipt.kernelLicense}`,
       `Validation: ${result.receipt.validationSummary}`,
@@ -633,12 +742,13 @@ export default function Home() {
           <a className="active" href="#calculator">
             Calculator
           </a>
+          <a href="#interpretations">Evidence</a>
           <a href="#method">Method</a>
           <a href="#certification">Certification</a>
           <a href="#scope">Scope</a>
         </nav>
         <div className="header-actions">
-          <span className="observatory-edition">P3 Observatory</span>
+          <span className="observatory-edition">P4 Evidence</span>
           <div className="local-badge">
             <span className="live-dot" />
             Server calculation • no saved birth data
@@ -649,7 +759,7 @@ export default function Home() {
       <section className="observatory-hero">
         <div className="hero-copy">
           <span className="accuracy-pill">
-            <Sparkle size={13} /> P2 certificate passed • MIT engine
+            <Sparkle size={13} /> P2 certificate passed • P4 evidence active
           </span>
           <h1>
             Your sky,
@@ -952,7 +1062,10 @@ export default function Home() {
           {!result ? (
             <EmptyChart />
           ) : result.kind === "unknown" ? (
-            <UnknownTimePanel result={result} />
+            <>
+              <UnknownTimePanel result={result} />
+              {interpretation && <InterpretationPanel report={interpretation} />}
+            </>
           ) : chart ? (
             <>
               {result.stability && (
@@ -1057,6 +1170,8 @@ export default function Home() {
                 </article>
               </div>
 
+              {interpretation && <InterpretationPanel report={interpretation} />}
+
               <article className="planet-card glass-panel">
                 <div className="section-title">
                   <div>
@@ -1119,7 +1234,7 @@ export default function Home() {
                     <span className="eyebrow">TRANSPARENT RULE CHECKS</span>
                     <h3>What the code actually tested</h3>
                   </div>
-                  <span>No generated interpretation</span>
+                  <span>Calculated checks • separate from P4 interpretations</span>
                 </div>
                 <div className="checks-grid">
                   {chart.rules.map((rule) => (
@@ -1177,6 +1292,14 @@ export default function Home() {
             <p>
               Every successful result includes its normalized UTC, coordinates, timezone data, profile, active engine, method,
               P2 certificate, timestamp, and deterministic input fingerprint.
+            </p>
+          </article>
+          <article>
+            <span>05</span>
+            <h3>Evidence-linked interpretation</h3>
+            <p>
+              P4 runs after calculation. Each traditional interpretation carries its approved rule ID, exact chart factors,
+              confidence state, and limitation. Unsupported readings are blocked instead of improvised.
             </p>
           </article>
         </div>
@@ -1260,6 +1383,7 @@ export default function Home() {
             <li>Historical DST validation and Calculation Receipt</li>
             <li>Approximate-time stability and unknown-time ranges</li>
             <li>P2 reference-chart regression certificate on every release</li>
+            <li>P4 deterministic interpretations with visible evidence and rule IDs</li>
           </ul>
         </div>
         <div className="not-calculated">
@@ -1270,7 +1394,8 @@ export default function Home() {
             <li>KP cuspal sub-lords and all D1–D60 Vargas</li>
             <li>Location-aware Muhurta start and end times</li>
             <li>Ashtakoota or Dashakoota compatibility scores</li>
-            <li>AI-generated personalized readings</li>
+            <li>Open-ended or predictive AI chat</li>
+            <li>Chart Story Mode, compatibility, and creative chart artwork</li>
             <li>True-node and alternate ayanamsa profiles</li>
             <li>Accuracy claims beyond the documented kernel target and pinned reference set</li>
             <li>Third-party accreditation or scientific validation of astrology</li>
@@ -1281,10 +1406,11 @@ export default function Home() {
       <section className="trust-note">
         <Sparkle />
         <div>
-          <strong>Free MIT accuracy route • P2 certification passed</strong>
+          <strong>Free MIT accuracy route • P2 certified • P4 evidence contract active</strong>
           <p>
             Every chart identifies the engine, kernel, licence, method IDs, timezone data, NASA/JPL reference profile, and P2
-            certificate used. Reference results prove the tested fixtures only; they are not a claim of perfect prediction.
+            certificate used. Every traditional interpretation links back to chart evidence. Neither layer is a claim of perfect
+            prediction.
           </p>
         </div>
       </section>
