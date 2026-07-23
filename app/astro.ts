@@ -244,8 +244,8 @@ function calculateAscendant(date: Date, latitude: number, longitude: number) {
 
 function createUtcDate(input: BirthInput) {
   const [year, month, day] = input.date.split("-").map(Number);
-  const [hour, minute] = input.time.split(":").map(Number);
-  const utcMillis = Date.UTC(year, month - 1, day, hour, minute) - input.utcOffset * 3_600_000;
+  const [hour, minute, second = 0] = input.time.split(":").map(Number);
+  const utcMillis = Date.UTC(year, month - 1, day, hour, minute, second) - input.utcOffset * 3_600_000;
   return new Date(utcMillis);
 }
 

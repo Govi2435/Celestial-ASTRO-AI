@@ -2,15 +2,19 @@
 
 import { FormEvent, useState } from "react";
 import {
-  BirthInput,
   ChartResult,
   formatDate,
   formatDegrees,
-  calculateChart,
   SIGNS,
   SIGN_GLYPHS,
-  ZodiacSystem,
 } from "./astro";
+import type {
+  BirthTimeConfidence,
+  CalculationReceipt,
+  CalculationRequest,
+  ProfessionalCalculationResult,
+  UnknownCalculationResult,
+} from "./professional";
 
 type ChartMode = "North Indian" | "South Indian" | "Zodiac Wheel";
 
@@ -40,6 +44,24 @@ const PLANET_TONES: Record<string, string> = {
   Saturn: "blue",
   Rahu: "cyan",
   Ketu: "cyan",
+};
+
+type PlaceResult = {
+  id: string;
+  displayName: string;
+  latitude: number;
+  longitude: number;
+  timezoneId: string;
+  type: string;
+  provider: string;
+};
+
+type LocationState = {
+  displayName: string;
+  latitude: string;
+  longitude: string;
+  timezoneId: string;
+  provider: string;
 };
 
 function Sparkle({ size = 18 }: { size?: number }) {
@@ -278,40 +300,217 @@ function EmptyChart() {
       </div>
       <span className="eyebrow">WAITING FOR BIRTH DETAILS</span>
       <h2>No chart has been calculated</h2>
-      <p>Enter an exact local birth date, time, coordinates, and UTC offset. Results stay blank until the calculation succeeds.</p>
+      <p>
+        Search for the birthplace and enter the recorded local date and time. Historical timezone and daylight-saving conversion are
+        resolved automatically.
+      </p>
       <div className="empty-points">
         <span>✓ No sample placements</span>
         <span>✓ No invented scores</span>
-        <span>✓ Input-driven output</span>
+        <span>✓ Calculation receipt included</span>
       </div>
     </div>
   );
 }
 
+function ReceiptPanel({ receipt }: { receipt: CalculationReceipt }) {
+  const rows = [
+    ["Chart ID", receipt.chartId],
+    ["Local input", receipt.localInput],
+    ["Normalized UTC", receipt.normalizedUtc],
+    ["Coordinates", receipt.coordinates],
+    ["IANA timezone", receipt.timezoneId],
+    ["Historical offset", `${receipt.timezoneOffset} • ${receipt.timezoneAbbreviation}`],
+    ["Timezone data", receipt.timezoneDataVersion],
+    ["Calculation profile", receipt.profileId],
+    ["Ayanamsa", receipt.ayanamsa],
+    ["Houses / nodes", `${receipt.houseSystem} • ${receipt.nodeMethod}`],
+    ["Active engine", `${receipt.engineName} ${receipt.engineVersion} • ${receipt.engineStatus}`],
+    ["Professional engine", receipt.professionalEngine],
+    ["Input fingerprint", receipt.inputFingerprint],
+    ["Calculated at", receipt.calculatedAt],
+  ];
+
+  return (
+    <article className="receipt-card glass-panel">
+      <div className="section-title">
+        <div>
+          <span className="eyebrow">CALCULATION RECEIPT</span>
+          <h3>How this result was produced</h3>
+        </div>
+        <span className="evidence-badge calculated">Calculated</span>
+      </div>
+      <dl className="receipt-grid">
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </article>
+  );
+}
+
+function UnknownTimePanel({ result }: { result: UnknownCalculationResult }) {
+  return (
+    <>
+      <article className="limited-card glass-panel">
+        <span className="evidence-badge limited">Limited • birth time unknown</span>
+        <h2>Date-range result</h2>
+        <p>
+          No exact time was invented. The engine evaluated the complete local civil day and shows only date-wide possibilities.
+          Ascendant, houses, and exact Dasha dates are suppressed.
+        </p>
+        <div className="range-meta">
+          <span>UTC range</span>
+          <strong>
+            {result.utcRange.start} — {result.utcRange.end}
+          </strong>
+        </div>
+      </article>
+
+      <article className="planet-card glass-panel">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">DAY-WIDE CALCULATION</span>
+            <h3>Possible planetary placements</h3>
+          </div>
+          <span>{result.planets.filter((planet) => planet.stableSign).length} stable signs</span>
+        </div>
+        <div className="range-table">
+          {result.planets.map((planet) => (
+            <div key={planet.name}>
+              <span className="planet-glyph">{planet.glyph}</span>
+              <strong>{planet.name}</strong>
+              <span>{planet.start}</span>
+              <span>{planet.end}</span>
+              <b className={planet.stableSign ? "stable" : "changing"}>
+                {planet.stableSign ? planet.possibleSigns[0] : planet.possibleSigns.join(" / ")}
+              </b>
+            </div>
+          ))}
+        </div>
+      </article>
+
+      <div className="fact-grid">
+        <article className="fact-card glass-panel">
+          <span className="eyebrow">POSSIBLE PANCHANG VALUES</span>
+          <h3>{result.possibleNakshatras.join(" / ")}</h3>
+          <dl>
+            <div>
+              <dt>Tithi</dt>
+              <dd>{result.possibleTithis.join(" / ")}</dd>
+            </div>
+            <div>
+              <dt>Yoga</dt>
+              <dd>{result.possibleYogas.join(" / ")}</dd>
+            </div>
+          </dl>
+        </article>
+        <article className="fact-card glass-panel">
+          <span className="eyebrow">SUPPRESSED FOR TRUST</span>
+          <h3>Time-dependent results</h3>
+          <ul className="suppressed-list">
+            {result.suppressed.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </article>
+      </div>
+
+      <ReceiptPanel receipt={result.receipt} />
+    </>
+  );
+}
+
 export default function Home() {
-  const [result, setResult] = useState<ChartResult | null>(null);
+  const [result, setResult] = useState<ProfessionalCalculationResult | null>(null);
   const [mode, setMode] = useState<ChartMode>("North Indian");
   const [error, setError] = useState("");
   const [calculating, setCalculating] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [places, setPlaces] = useState<PlaceResult[]>([]);
+  const [timeConfidence, setTimeConfidence] = useState<BirthTimeConfidence>("exact");
+  const [location, setLocation] = useState<LocationState>({
+    displayName: "",
+    latitude: "",
+    longitude: "",
+    timezoneId: "",
+    provider: "Verified manual entry",
+  });
+  const chart = result?.kind === "timed" ? result.chart : null;
 
-  function submitBirthDetails(event: FormEvent<HTMLFormElement>) {
+  async function searchPlaces() {
+    if (placeQuery.trim().length < 3) {
+      setError("Enter at least three characters for the birthplace.");
+      return;
+    }
+    setSearching(true);
+    setError("");
+    setPlaces([]);
+    try {
+      const response = await fetch(`/api/places?q=${encodeURIComponent(placeQuery.trim())}`);
+      const payload = (await response.json()) as { results?: PlaceResult[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Place search failed.");
+      setPlaces(payload.results ?? []);
+      if (!payload.results?.length) setError("No matching place was found. Try a more specific city and country.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Place search failed.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function selectPlace(place: PlaceResult) {
+    setLocation({
+      displayName: place.displayName,
+      latitude: String(place.latitude),
+      longitude: String(place.longitude),
+      timezoneId: place.timezoneId,
+      provider: place.provider,
+    });
+    setPlaceQuery(place.displayName);
+    setPlaces([]);
+    setError("");
+  }
+
+  async function submitBirthDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCalculating(true);
     setError("");
     const data = new FormData(event.currentTarget);
-    const input: BirthInput = {
+    const input: CalculationRequest = {
       name: String(data.get("name") || "").trim(),
-      location: String(data.get("location") || "").trim(),
+      location: location.displayName.trim(),
       date: String(data.get("date") || ""),
-      time: String(data.get("time") || ""),
-      utcOffset: Number(data.get("utcOffset")),
-      latitude: Number(data.get("latitude")),
-      longitude: Number(data.get("longitude")),
-      system: String(data.get("system")) as ZodiacSystem,
+      time: timeConfidence === "unknown" ? "" : String(data.get("time") || ""),
+      timeConfidence,
+      uncertaintyMinutes: timeConfidence === "approximate" ? Number(data.get("uncertaintyMinutes")) : 0,
+      timezoneId: location.timezoneId.trim(),
+      latitude: Number(location.latitude),
+      longitude: Number(location.longitude),
+      placeProvider: location.provider,
     };
 
     try {
-      setResult(calculateChart(input));
+      const response = await fetch("/api/calculate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const payload = (await response.json()) as ProfessionalCalculationResult & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "The calculation could not be completed.");
+      if (payload.kind === "timed") {
+        payload.chart.utcDate = new Date(payload.chart.utcDate);
+        payload.chart.dashas = payload.chart.dashas.map((dasha) => ({
+          ...dasha,
+          start: new Date(String(dasha.start)),
+          end: new Date(String(dasha.end)),
+        }));
+      }
+      setResult(payload);
     } catch (caught) {
       setResult(null);
       setError(caught instanceof Error ? caught.message : "The calculation could not be completed.");
@@ -322,37 +521,74 @@ export default function Home() {
 
   function downloadReport() {
     if (!result) return;
-    const rows = result.planets.map(
+    if (result.kind === "unknown") {
+      const report = [
+        "CELESTIAL ASTRO AI — DATE-RANGE CALCULATION",
+        `Birth date: ${result.input.date}`,
+        `Birthplace: ${result.input.location}`,
+        `Timezone: ${result.receipt.timezoneId}`,
+        `UTC range: ${result.utcRange.start} — ${result.utcRange.end}`,
+        "Birth time: Unknown — no exact time was invented",
+        "",
+        "POSSIBLE PLANETARY POSITIONS",
+        ...result.planets.map(
+          (planet) =>
+            `${planet.name.padEnd(8)} ${planet.start} → ${planet.end} • ${
+              planet.stableSign ? `stable ${planet.possibleSigns[0]}` : `may cross ${planet.possibleSigns.join(" / ")}`
+            }`,
+        ),
+        "",
+        "SUPPRESSED",
+        ...result.suppressed.map((item) => `- ${item}`),
+        "",
+        `Receipt: ${result.receipt.chartId}`,
+        `Fingerprint: ${result.receipt.inputFingerprint}`,
+        `Engine: ${result.receipt.engineName} ${result.receipt.engineVersion} • ${result.receipt.engineStatus}`,
+      ].join("\n");
+      const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "celestial-astro-ai-date-range.txt";
+      link.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    const rows = result.chart.planets.map(
       (planet) =>
         `${planet.name.padEnd(8)} ${planet.sign.padEnd(12)} ${formatDegrees(planet.degreeInSign)}  H${planet.house}${
           planet.retrograde ? "  Retrograde" : ""
         }`,
     );
     const report = [
-      "COSMICSPHERE — CALCULATED CHART DATA",
-      `Name: ${result.input.name || "Not provided"}`,
-      `Location label: ${result.input.location || "Not provided"}`,
-      `Coordinates: ${result.input.latitude}, ${result.input.longitude}`,
-      `Input UTC offset: ${result.input.utcOffset >= 0 ? "+" : ""}${result.input.utcOffset}`,
-      `Calculated UTC: ${result.utcDate.toISOString()}`,
-      `Zodiac basis: ${result.input.system === "lahiri" ? "Mean Lahiri sidereal" : "Tropical"}`,
-      `Ayanamsa: ${formatDegrees(result.ayanamsa)}`,
-      `Ascendant: ${result.ascendantSign} ${formatDegrees(result.ascendantDegree)}`,
-      `Moon Nakshatra (mean Lahiri): ${result.moonNakshatra}, Pada ${result.moonPada}`,
+      "CELESTIAL ASTRO AI — CALCULATED CHART DATA",
+      `Name: ${result.chart.input.name || "Not provided"}`,
+      `Location label: ${result.chart.input.location || "Not provided"}`,
+      `Coordinates: ${result.receipt.coordinates}`,
+      `Timezone: ${result.receipt.timezoneId} • ${result.receipt.timezoneOffset}`,
+      `Calculated UTC: ${result.chart.utcDate.toISOString()}`,
+      "Zodiac basis: Mean Lahiri sidereal",
+      `Ayanamsa: ${formatDegrees(result.chart.ayanamsa)}`,
+      `Ascendant: ${result.chart.ascendantSign} ${formatDegrees(result.chart.ascendantDegree)}`,
+      `Moon Nakshatra (mean Lahiri): ${result.chart.moonNakshatra}, Pada ${result.chart.moonPada}`,
       "",
       "PLANETARY POSITIONS",
       ...rows,
       "",
-      `Birth Tithi: ${result.tithi}`,
-      `Birth Yoga: ${result.yoga}`,
+      `Birth Tithi: ${result.chart.tithi}`,
+      `Birth Yoga: ${result.chart.yoga}`,
       "",
       "Method: Astronomy Engine geocentric positions; whole-sign houses; mean Rahu/Ketu.",
+      `Receipt: ${result.receipt.chartId}`,
+      `Fingerprint: ${result.receipt.inputFingerprint}`,
+      `Timezone data: ${result.receipt.timezoneDataVersion}`,
+      `Professional engine: ${result.receipt.professionalEngine}`,
       "This report contains calculated data, not professional or predictive advice.",
     ].join("\n");
     const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = "cosmicsphere-calculated-chart.txt";
+    link.download = "celestial-astro-ai-calculated-chart.txt";
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -363,10 +599,10 @@ export default function Home() {
       <div className="aurora aurora-two" />
 
       <header className="topbar">
-        <a className="brand" href="#" aria-label="CosmicSphere home">
+        <a className="brand" href="#" aria-label="Celestial ASTRO AI home">
           <MoonLogo />
           <span>
-            <strong>Cosmic</strong>Sphere
+            <strong>Celestial</strong> ASTRO AI
           </span>
         </a>
         <nav className="desktop-nav" aria-label="Main navigation">
@@ -378,23 +614,23 @@ export default function Home() {
         </nav>
         <div className="local-badge">
           <span className="live-dot" />
-          Local calculation • no saved birth data
+          Server calculation • no saved birth data
         </div>
       </header>
 
       <section className="intro-band">
         <div>
           <span className="accuracy-pill">
-            <Sparkle size={13} /> Input-driven calculator
+            <Sparkle size={13} /> P1 trust-first calculation pipeline
           </span>
           <h1>
-            Your sky, calculated from
-            <em> your exact details.</em>
+            Your chart, calculated and
+            <em> fully traceable.</em>
           </h1>
         </div>
         <p>
-          This version does not preload a fictional person or a sample reading. It calculates astronomical positions only after you
-          provide a complete birth time and location.
+          Search the birthplace, confirm the recorded time, and receive historical timezone conversion with an auditable Calculation
+          Receipt. Unknown time stays unknown—never invented.
         </p>
       </section>
 
@@ -403,7 +639,7 @@ export default function Home() {
           <div className="panel-heading">
             <div>
               <span className="eyebrow">REQUIRED INPUT</span>
-              <h2>Exact birth details</h2>
+              <h2>Verified birth details</h2>
             </div>
             <span className="step-badge">01</span>
           </div>
@@ -416,10 +652,120 @@ export default function Home() {
               </span>
             </label>
             <label>
-              Location label <small>optional; calculations use coordinates</small>
+              Birthplace <small>search is submitted manually; no autocomplete tracking</small>
+              <span className="place-search-row">
+                <span className="field-wrap">
+                  <span>⌖</span>
+                  <input
+                    value={placeQuery}
+                    onChange={(event) => setPlaceQuery(event.target.value)}
+                    placeholder="City, state, country"
+                    aria-label="Birthplace search"
+                  />
+                </span>
+                <button type="button" className="search-button" onClick={searchPlaces} disabled={searching}>
+                  {searching ? "…" : "Find"}
+                </button>
+              </span>
+            </label>
+            {places.length > 0 && (
+              <div className="place-results" role="list" aria-label="Birthplace results">
+                {places.map((place) => (
+                  <button type="button" key={place.id} onClick={() => selectPlace(place)}>
+                    <strong>{place.displayName}</strong>
+                    <small>
+                      {place.latitude.toFixed(4)}, {place.longitude.toFixed(4)} • {place.timezoneId}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            )}
+            {location.timezoneId && (
+              <div className="selected-place">
+                <span>✓</span>
+                <p>
+                  <strong>{location.displayName}</strong>
+                  <small>
+                    {Number(location.latitude).toFixed(5)}, {Number(location.longitude).toFixed(5)} • {location.timezoneId}
+                  </small>
+                </p>
+              </div>
+            )}
+            <details className="manual-location">
+              <summary>Verified manual location</summary>
+              <label>
+                Location label
+                <span className="field-wrap">
+                  <span>⌖</span>
+                  <input
+                    value={location.displayName}
+                    onChange={(event) =>
+                      setLocation((current) => ({ ...current, displayName: event.target.value, provider: "Verified manual entry" }))
+                    }
+                    placeholder="City, state, country"
+                  />
+                </span>
+              </label>
+              <div className="form-row">
+                <label>
+                  Latitude
+                  <span className="field-wrap">
+                    <span>φ</span>
+                    <input
+                      value={location.latitude}
+                      onChange={(event) =>
+                        setLocation((current) => ({ ...current, latitude: event.target.value, provider: "Verified manual entry" }))
+                      }
+                      type="number"
+                      min="-90"
+                      max="90"
+                      step="0.000001"
+                    />
+                  </span>
+                </label>
+                <label>
+                  Longitude
+                  <span className="field-wrap">
+                    <span>λ</span>
+                    <input
+                      value={location.longitude}
+                      onChange={(event) =>
+                        setLocation((current) => ({ ...current, longitude: event.target.value, provider: "Verified manual entry" }))
+                      }
+                      type="number"
+                      min="-180"
+                      max="180"
+                      step="0.000001"
+                    />
+                  </span>
+                </label>
+              </div>
+              <label>
+                IANA timezone
+                <span className="field-wrap">
+                  <span>◷</span>
+                  <input
+                    value={location.timezoneId}
+                    onChange={(event) =>
+                      setLocation((current) => ({ ...current, timezoneId: event.target.value, provider: "Verified manual entry" }))
+                    }
+                    placeholder="Example: Asia/Kolkata"
+                  />
+                </span>
+              </label>
+            </details>
+            <label>
+              Birth-time confidence
               <span className="field-wrap">
-                <span>⌖</span>
-                <input name="location" placeholder="City, state, country" />
+                <span>◉</span>
+                <select
+                  value={timeConfidence}
+                  onChange={(event) => setTimeConfidence(event.target.value as BirthTimeConfidence)}
+                >
+                  <option value="exact">Exact / recorded</option>
+                  <option value="approximate">Approximate</option>
+                  <option value="unknown">I do not know the time</option>
+                </select>
               </span>
             </label>
             <div className="form-row">
@@ -434,55 +780,43 @@ export default function Home() {
                 Local birth time
                 <span className="field-wrap">
                   <span>⌾</span>
-                  <input name="time" type="time" required />
-                </span>
-              </label>
-            </div>
-            <label>
-              UTC offset at birth <small>include daylight-saving offset if it applied</small>
-              <span className="field-wrap">
-                <span>±</span>
-                <input name="utcOffset" type="number" min="-14" max="14" step="0.25" placeholder="Example: 5.5" required />
-              </span>
-            </label>
-            <div className="form-row">
-              <label>
-                Latitude
-                <span className="field-wrap">
-                  <span>φ</span>
-                  <input name="latitude" type="number" min="-90" max="90" step="0.000001" placeholder="North is +" required />
-                </span>
-              </label>
-              <label>
-                Longitude
-                <span className="field-wrap">
-                  <span>λ</span>
                   <input
-                    name="longitude"
-                    type="number"
-                    min="-180"
-                    max="180"
-                    step="0.000001"
-                    placeholder="East is +"
-                    required
+                    name="time"
+                    type="time"
+                    step="1"
+                    required={timeConfidence !== "unknown"}
+                    disabled={timeConfidence === "unknown"}
                   />
                 </span>
               </label>
             </div>
-            <label>
-              Zodiac basis
-              <span className="field-wrap">
-                <span>☼</span>
-                <select name="system" defaultValue="lahiri">
-                  <option value="lahiri">Mean Lahiri sidereal</option>
-                  <option value="tropical">Tropical</option>
-                </select>
-              </span>
-            </label>
+            {timeConfidence === "approximate" && (
+              <label>
+                Time uncertainty
+                <span className="field-wrap">
+                  <span>±</span>
+                  <select name="uncertaintyMinutes" defaultValue="15">
+                    <option value="5">± 5 minutes</option>
+                    <option value="10">± 10 minutes</option>
+                    <option value="15">± 15 minutes</option>
+                    <option value="30">± 30 minutes</option>
+                    <option value="60">± 60 minutes</option>
+                  </select>
+                </span>
+              </label>
+            )}
+            <div className="profile-lock">
+              <span>V1</span>
+              <p>
+                <strong>Vedic calculation profile</strong>
+                <small>Lahiri sidereal • whole-sign houses • mean Rahu/Ketu</small>
+              </p>
+            </div>
             <div className="coordinate-note">
               <span>!</span>
               <p>
-                Coordinates and historical UTC offset directly affect the Ascendant. Verify them before relying on the result.
+                The site derives historical UTC offset and DST from the confirmed IANA timezone. Search data © OpenStreetMap
+                contributors.
               </p>
             </div>
             {error && (
@@ -500,10 +834,18 @@ export default function Home() {
           <div className="result-toolbar">
             <div>
               <span className="eyebrow">CALCULATION OUTPUT</span>
-              <h2>{result ? `${result.input.name || "Birth"} chart` : "Ready when your inputs are"}</h2>
+              <h2>
+                {result
+                  ? result.kind === "timed"
+                    ? `${result.chart.input.name || "Birth"} chart`
+                    : `${result.input.name || "Birth"} date range`
+                  : "Ready when your inputs are"}
+              </h2>
               <p>
                 {result
-                  ? `${result.input.system === "lahiri" ? "Mean Lahiri sidereal" : "Tropical"} • ${result.utcDate.toISOString()}`
+                  ? result.kind === "timed"
+                    ? `Vedic profile • ${result.chart.utcDate.toISOString()} • ${result.receipt.timezoneId}`
+                    : `Time unknown • ${result.receipt.timezoneId} • exact houses suppressed`
                   : "Nothing below is populated with sample data."}
               </p>
             </div>
@@ -514,8 +856,30 @@ export default function Home() {
 
           {!result ? (
             <EmptyChart />
-          ) : (
+          ) : result.kind === "unknown" ? (
+            <UnknownTimePanel result={result} />
+          ) : chart ? (
             <>
+              {result.stability && (
+                <article className="stability-card glass-panel">
+                  <span className="evidence-badge limited">Approximate time • ±{result.stability.uncertaintyMinutes} min</span>
+                  <p>
+                    Ascendant sign {result.stability.ascendantStable ? "stays stable" : "may change"}; Moon sign{" "}
+                    {result.stability.moonSignStable ? "stays stable" : "may change"}; Nakshatra{" "}
+                    {result.stability.nakshatraStable ? "stays stable" : "may change"}.
+                    {result.stability.houseChanges.length > 0
+                      ? ` Possible house changes: ${result.stability.houseChanges.join(", ")}.`
+                      : " No sampled planetary house changes were detected."}
+                  </p>
+                </article>
+              )}
+              <article className="engine-gate">
+                <span className="evidence-badge calculated">Calculated</span>
+                <p>
+                  Active engine: Astronomy Engine provisional fallback. Swiss Ephemeris Professional Licence route selected; engine
+                  not activated.
+                </p>
+              </article>
               <article className="chart-card glass-panel">
                 <div className="chart-toolbar">
                   <div className="mode-switch" role="group" aria-label="Chart style">
@@ -526,32 +890,32 @@ export default function Home() {
                     ))}
                   </div>
                   <div className="chart-meta">
-                    <span className="live-dot" /> Calculated
+                    <span className="live-dot" /> Receipt {result.receipt.chartId}
                   </div>
                 </div>
                 <div className="chart-stage">
-                  <ChartGraphic result={result} mode={mode} />
+                  <ChartGraphic result={chart} mode={mode} />
                   <div className="chart-summary">
                     <span className="eyebrow">ASCENDANT</span>
-                    <div className="sign-badge">{SIGN_GLYPHS[result.ascendantSignIndex]}</div>
-                    <h3>{result.ascendantSign}</h3>
-                    <p>{formatDegrees(result.ascendantDegree)}</p>
+                    <div className="sign-badge">{SIGN_GLYPHS[chart.ascendantSignIndex]}</div>
+                    <h3>{chart.ascendantSign}</h3>
+                    <p>{formatDegrees(chart.ascendantDegree)}</p>
                     <div className="summary-rule" />
                     <div>
                       <span>Moon sign</span>
-                      <strong>{result.planets.find((planet) => planet.name === "Moon")?.sign}</strong>
+                      <strong>{chart.planets.find((planet) => planet.name === "Moon")?.sign}</strong>
                     </div>
                     <div>
                       <span>Nakshatra (Lahiri)</span>
-                      <strong>{result.moonNakshatra}</strong>
+                      <strong>{chart.moonNakshatra}</strong>
                     </div>
                     <div>
                       <span>Pada</span>
-                      <strong>{result.moonPada}</strong>
+                      <strong>{chart.moonPada}</strong>
                     </div>
                     <div>
                       <span>Ayanamsa</span>
-                      <strong>{formatDegrees(result.ayanamsa)}</strong>
+                      <strong>{formatDegrees(chart.ayanamsa)}</strong>
                     </div>
                   </div>
                 </div>
@@ -560,39 +924,39 @@ export default function Home() {
               <div className="fact-grid">
                 <article className="fact-card glass-panel">
                   <span className="eyebrow">BIRTH PANCHANG • MEAN LAHIRI</span>
-                  <h3>{result.tithi}</h3>
+                  <h3>{chart.tithi}</h3>
                   <dl>
                     <div>
                       <dt>Paksha</dt>
-                      <dd>{result.paksha}</dd>
+                      <dd>{chart.paksha}</dd>
                     </div>
                     <div>
                       <dt>Nakshatra</dt>
                       <dd>
-                        {result.moonNakshatra}, Pada {result.moonPada}
+                        {chart.moonNakshatra}, Pada {chart.moonPada}
                       </dd>
                     </div>
                     <div>
                       <dt>Yoga</dt>
-                      <dd>{result.yoga}</dd>
+                      <dd>{chart.yoga}</dd>
                     </div>
                   </dl>
                 </article>
                 <article className="fact-card glass-panel">
                   <span className="eyebrow">NUMEROLOGY</span>
-                  <h3>Life Path {result.numerology.lifePath}</h3>
+                  <h3>Life Path {chart.numerology.lifePath}</h3>
                   <dl>
                     <div>
                       <dt>Expression</dt>
-                      <dd>{result.numerology.expression ?? "Name required"}</dd>
+                      <dd>{chart.numerology.expression ?? "Name required"}</dd>
                     </div>
                     <div>
                       <dt>Soul Urge</dt>
-                      <dd>{result.numerology.soulUrge ?? "Name required"}</dd>
+                      <dd>{chart.numerology.soulUrge ?? "Name required"}</dd>
                     </div>
                     <div>
                       <dt>Personal Year</dt>
-                      <dd>{result.numerology.personalYear}</dd>
+                      <dd>{chart.numerology.personalYear}</dd>
                     </div>
                   </dl>
                 </article>
@@ -604,7 +968,7 @@ export default function Home() {
                     <span className="eyebrow">CALCULATED LONGITUDES</span>
                     <h3>Planetary positions</h3>
                   </div>
-                  <span>{result.planets.length} bodies</span>
+                  <span>{chart.planets.length} bodies</span>
                 </div>
                 <div className="planet-header">
                   <span>Body</span>
@@ -614,7 +978,7 @@ export default function Home() {
                   <span>Motion</span>
                 </div>
                 <div className="planet-table">
-                  {result.planets.map((planet) => (
+                  {chart.planets.map((planet) => (
                     <div key={planet.name}>
                       <span className={`planet-glyph ${PLANET_TONES[planet.name] || "neutral"}`}>{planet.glyph}</span>
                       <strong>{planet.name}</strong>
@@ -631,7 +995,7 @@ export default function Home() {
                 </div>
               </article>
 
-              {result.dashas.length > 0 && (
+              {chart.dashas.length > 0 && (
                 <article className="dasha-card glass-panel">
                   <div className="section-title">
                     <div>
@@ -641,7 +1005,7 @@ export default function Home() {
                     <span>120-year sequence</span>
                   </div>
                   <div className="dasha-list">
-                    {result.dashas.map((dasha) => (
+                    {chart.dashas.map((dasha) => (
                       <div className={dasha.current ? "current" : ""} key={`${dasha.lord}-${dasha.start.toISOString()}`}>
                         <span>{dasha.lord}</span>
                         <strong>
@@ -663,7 +1027,7 @@ export default function Home() {
                   <span>No generated interpretation</span>
                 </div>
                 <div className="checks-grid">
-                  {result.rules.map((rule) => (
+                  {chart.rules.map((rule) => (
                     <div key={rule.name}>
                       <span className={`check-dot ${rule.status}`} />
                       <p>
@@ -675,8 +1039,9 @@ export default function Home() {
                   ))}
                 </div>
               </article>
+              <ReceiptPanel receipt={result.receipt} />
             </>
-          )}
+          ) : null}
         </section>
       </section>
 
@@ -697,26 +1062,26 @@ export default function Home() {
           </article>
           <article>
             <span>02</span>
-            <h3>Coordinate conversion</h3>
+            <h3>Historical timezone</h3>
             <p>
-              Local time is converted to UTC using the offset you supply. Greenwich sidereal time, latitude, and longitude determine
-              the Ascendant. Houses are whole-sign houses.
+              Place coordinates resolve to an IANA timezone. The server uses pinned timezone data to detect historical UTC offset,
+              daylight-saving changes, nonexistent times, and duplicated clock times.
             </p>
           </article>
           <article>
             <span>03</span>
-            <h3>Sidereal option</h3>
+            <h3>Birth-time confidence</h3>
             <p>
-              The Lahiri option uses an explicitly labelled mean Lahiri approximation. It is not silently presented as licensed Swiss
-              Ephemeris output.
+              Exact, approximate, and unknown times follow different paths. Approximate times receive stability checks. Unknown times
+              produce date-wide ranges and suppress Ascendant, houses, and exact Dasha dates.
             </p>
           </article>
           <article>
             <span>04</span>
-            <h3>Rules, not predictions</h3>
+            <h3>Versioned receipt</h3>
             <p>
-              Every displayed dosha or yoga check states the exact limited rule it evaluated. The site does not invent remedies,
-              personality claims, timing predictions, or compatibility scores.
+              Every successful result includes its normalized UTC, coordinates, timezone data, profile, active engine, method,
+              timestamp, and deterministic input fingerprint.
             </p>
           </article>
         </div>
@@ -734,6 +1099,9 @@ export default function Home() {
             <li>Vimshottari Mahadasha sequence</li>
             <li>Five explicitly defined Jyotish rule checks</li>
             <li>Pythagorean numerology from entered data</li>
+            <li>Automatic place-to-IANA-timezone resolution</li>
+            <li>Historical DST validation and Calculation Receipt</li>
+            <li>Approximate-time stability and unknown-time ranges</li>
           </ul>
         </div>
         <div className="not-calculated">
@@ -746,6 +1114,7 @@ export default function Home() {
             <li>Ashtakoota or Dashakoota compatibility scores</li>
             <li>AI-generated personalized readings</li>
             <li>Swiss Ephemeris branding or precision claims</li>
+            <li>Public Swiss engine activation before the Professional Licence is obtained</li>
           </ul>
         </div>
       </section>
@@ -753,10 +1122,10 @@ export default function Home() {
       <section className="license-note">
         <Sparkle />
         <div>
-          <strong>Why this does not claim Swiss Ephemeris</strong>
+          <strong>Professional engine activation gate</strong>
           <p>
-            Swiss Ephemeris uses AGPL or a commercial professional license. A commercial product should choose and comply with the
-            correct license before integrating it.
+            The Swiss Ephemeris Professional Licence route is approved, but the licence and production engine are not installed.
+            Current receipts therefore identify Astronomy Engine as the provisional fallback. No result is labelled Swiss output.
           </p>
         </div>
       </section>
@@ -765,7 +1134,7 @@ export default function Home() {
         <a className="brand" href="#">
           <MoonLogo />
           <span>
-            <strong>Cosmic</strong>Sphere
+            <strong>Celestial</strong> ASTRO AI
           </span>
         </a>
         <p>Calculated data first. Interpretation only when its source is clear.</p>
