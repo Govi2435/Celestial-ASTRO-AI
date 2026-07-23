@@ -1,3 +1,5 @@
+import { CERTIFICATION_PROFILE } from "./certification-profile.ts";
+
 export const ENGINE_PROFILE = {
   id: "celestial-mit-v1",
   name: "Celestial Calculation Engine",
@@ -40,5 +42,6 @@ export function engineFingerprint() {
     NODE_PROFILE.id,
     HOUSE_PROFILE.id,
     ENGINE_PROFILE.validationProfile,
+    CERTIFICATION_PROFILE.id,
   ].join("|");
 }

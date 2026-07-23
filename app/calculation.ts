@@ -1,4 +1,5 @@
 import { calculateChart, type BirthInput, type ChartResult, formatDegrees } from "./astro.ts";
+import { CERTIFICATION_PROFILE } from "./certification-profile.ts";
 import {
   AYANAMSA_PROFILE,
   CALCULATION_PROFILE_ID,
@@ -26,7 +27,7 @@ export type CalculationRequest = {
 };
 
 export type CalculationReceipt = {
-  schema: "calculation-receipt-v2";
+  schema: "calculation-receipt-v3";
   chartId: string;
   inputFingerprint: string;
   calculatedAt: string;
@@ -54,6 +55,10 @@ export type CalculationReceipt = {
   kernelLicense: typeof ENGINE_PROFILE.kernelLicense;
   validationProfile: typeof ENGINE_PROFILE.validationProfile;
   validationSummary: typeof ENGINE_PROFILE.validationSummary;
+  certificationId: typeof CERTIFICATION_PROFILE.certificateId;
+  certificationProfile: typeof CERTIFICATION_PROFILE.id;
+  certificationStatus: typeof CERTIFICATION_PROFILE.status;
+  certificationSummary: typeof CERTIFICATION_PROFILE.summary;
 };
 
 export type StabilityCheck = {
@@ -148,6 +153,14 @@ async function sha256(value: string) {
     .join("");
 }
 
+function formatUtcOffset(offsetMinutes: number) {
+  const sign = offsetMinutes < 0 ? "-" : "+";
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+  return `${sign}${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 async function receipt(
   input: CalculationRequest,
   normalizedUtc: string,
@@ -166,7 +179,7 @@ async function receipt(
   const fingerprint = await sha256(canonical);
   const calculatedAt = new Date().toISOString();
   return {
-    schema: "calculation-receipt-v2",
+    schema: "calculation-receipt-v3",
     chartId: `chart_${fingerprint.slice(0, 16)}`,
     inputFingerprint: `sha256:${fingerprint}`,
     calculatedAt,
@@ -194,6 +207,10 @@ async function receipt(
     kernelLicense: ENGINE_PROFILE.kernelLicense,
     validationProfile: ENGINE_PROFILE.validationProfile,
     validationSummary: ENGINE_PROFILE.validationSummary,
+    certificationId: CERTIFICATION_PROFILE.certificateId,
+    certificationProfile: CERTIFICATION_PROFILE.id,
+    certificationStatus: CERTIFICATION_PROFILE.status,
+    certificationSummary: CERTIFICATION_PROFILE.summary,
   };
 }
 
@@ -228,7 +245,7 @@ async function calculateTimed(input: CalculationRequest): Promise<TimedCalculati
   const resolved = resolveLocalTime(input.date, input.time, input.timezoneId);
   if (resolved.utcDate > new Date()) throw new Error("Birth time cannot be in the future.");
   const chart = chartAtInstant(input, resolved.utcDate);
-  const offset = `${resolved.offsetHours >= 0 ? "+" : ""}${resolved.offsetHours}`;
+  const offset = formatUtcOffset(resolved.offsetMinutes);
   return {
     kind: "timed",
     chart,

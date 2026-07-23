@@ -57,3 +57,20 @@ separate profile IDs and fixtures.
 
 The JPL fixture set validates planetary longitudes only. It does not validate
 the ayanamsa, Ascendant, houses, lunar nodes, Dashas, or Jyotish rules.
+
+## P2 reference chart certification
+
+The active internal certificate is `CAA-P2-RCC-20260723-01` under profile
+`reference-chart-cert-v1`.
+
+It adds five complete timed-chart regression fixtures across Asia/Kolkata,
+America/New_York, Europe/London, Australia/Sydney, and Asia/Kathmandu. The
+fixtures lock 60 placements plus Ascendant, houses, Panchang values, historical
+UTC conversion, DST behavior, a quarter-hour timezone, and approximate-time
+stability. A sixth unknown-time scenario verifies suppression of time-dependent
+outputs. Nonexistent and duplicated DST clock times remain rejection cases.
+
+These full-chart fixtures validate deterministic reproduction of the named
+profile. They are not independent astronomical evidence. See
+`docs/REFERENCE_CHART_CERTIFICATION.md` for the acceptance criteria and exact
+scope.

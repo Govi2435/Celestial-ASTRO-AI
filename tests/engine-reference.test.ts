@@ -64,7 +64,7 @@ test("calculation receipt identifies the active MIT engine and validation profil
   const first = await calculateCelestial(input);
   const second = await calculateCelestial(input);
 
-  assert.equal(first.receipt.schema, "calculation-receipt-v2");
+  assert.equal(first.receipt.schema, "calculation-receipt-v3");
   assert.equal(first.receipt.engineName, ENGINE_PROFILE.name);
   assert.equal(first.receipt.engineVersion, ENGINE_PROFILE.version);
   assert.equal(first.receipt.kernel, `${ENGINE_PROFILE.kernelName} ${ENGINE_PROFILE.kernelVersion}`);

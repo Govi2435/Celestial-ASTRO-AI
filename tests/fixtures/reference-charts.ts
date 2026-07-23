@@ -1,0 +1,211 @@
+import type { CalculationRequest } from "../../app/calculation.ts";
+
+export type PlanetSnapshot = readonly [
+  name: string,
+  longitude: number,
+  sign: string,
+  house: number,
+  retrograde: boolean,
+];
+
+type ReferenceChart = {
+  id: string;
+  input: CalculationRequest;
+  expected: {
+    utc: string;
+    offset: string;
+    abbreviation: string;
+    ayanamsa: number;
+    ascendant: readonly [sign: string, degree: number];
+    panchang: readonly [nakshatra: string, pada: number, tithi: string, paksha: string, yoga: string];
+    planets: readonly PlanetSnapshot[];
+  };
+};
+
+export const REFERENCE_CHARTS: readonly ReferenceChart[] = [
+  {
+    id: "anand-standard",
+    input: {
+      name: "Reference A",
+      location: "Anand, India",
+      date: "2000-01-01",
+      time: "12:00:00",
+      timeConfidence: "exact",
+      uncertaintyMinutes: 15,
+      timezoneId: "Asia/Kolkata",
+      latitude: 22.5645,
+      longitude: 72.9289,
+      placeProvider: "reference fixture",
+    },
+    expected: {
+      utc: "2000-01-01T06:30:00.000Z",
+      offset: "+05:30",
+      abbreviation: "IST",
+      ayanamsa: 23.856741,
+      ascendant: ["Virgo", 7.020765],
+      panchang: ["Swati", 4, "Krishna Ekadashi", "Krishna Paksha", "Sukarma"],
+      planets: [
+        ["Sun", 256.278282, "Sagittarius", 4, false],
+        ["Moon", 196.708231, "Libra", 2, false],
+        ["Mercury", 247.675662, "Sagittarius", 4, false],
+        ["Venus", 217.43145, "Scorpio", 3, false],
+        ["Mars", 303.929399, "Aquarius", 6, false],
+        ["Jupiter", 1.388208, "Aries", 8, false],
+        ["Saturn", 16.544, "Aries", 8, true],
+        ["Uranus", 290.937838, "Capricorn", 5, false],
+        ["Neptune", 279.330555, "Capricorn", 5, false],
+        ["Pluto", 227.589931, "Scorpio", 3, false],
+        ["Rahu", 101.199914, "Cancer", 11, true],
+        ["Ketu", 281.199914, "Capricorn", 5, true],
+      ],
+    },
+  },
+  {
+    id: "new-york-dst",
+    input: {
+      name: "Reference B",
+      location: "New York, USA",
+      date: "1990-07-15",
+      time: "12:00:00",
+      timeConfidence: "exact",
+      uncertaintyMinutes: 15,
+      timezoneId: "America/New_York",
+      latitude: 40.7128,
+      longitude: -74.006,
+      placeProvider: "reference fixture",
+    },
+    expected: {
+      utc: "1990-07-15T16:00:00.000Z",
+      offset: "-04:00",
+      abbreviation: "EDT",
+      ayanamsa: 23.724534,
+      ascendant: ["Pisces", 13.607307],
+      panchang: ["Ashwini", 1, "Krishna Ashtami", "Krishna Paksha", "Sukarma"],
+      planets: [
+        ["Sun", 89.180705, "Gemini", 4, false],
+        ["Moon", 1.876239, "Aries", 2, false],
+        ["Mercury", 103.361608, "Cancer", 5, false],
+        ["Venus", 60.886518, "Gemini", 4, false],
+        ["Mars", 8.32872, "Aries", 2, false],
+        ["Jupiter", 88.862189, "Gemini", 4, false],
+        ["Saturn", 268.226635, "Sagittarius", 10, true],
+        ["Uranus", 253.234514, "Sagittarius", 10, true],
+        ["Neptune", 259.192045, "Sagittarius", 10, true],
+        ["Pluto", 201.274631, "Libra", 8, true],
+        ["Rahu", 284.372344, "Capricorn", 11, true],
+        ["Ketu", 104.372344, "Cancer", 5, true],
+      ],
+    },
+  },
+  {
+    id: "london-winter",
+    input: {
+      name: "Reference C",
+      location: "London, UK",
+      date: "1985-02-01",
+      time: "08:30:00",
+      timeConfidence: "exact",
+      uncertaintyMinutes: 15,
+      timezoneId: "Europe/London",
+      latitude: 51.5074,
+      longitude: -0.1278,
+      placeProvider: "reference fixture",
+    },
+    expected: {
+      utc: "1985-02-01T08:30:00.000Z",
+      offset: "+00:00",
+      abbreviation: "GMT",
+      ayanamsa: 23.648409,
+      ascendant: ["Leo", 10.576931],
+      panchang: ["Mrigashira", 1, "Shukla Ekadashi", "Shukla Paksha", "Indra"],
+      planets: [
+        ["Sun", 288.78615, "Capricorn", 6, false],
+        ["Moon", 54.792957, "Taurus", 10, false],
+        ["Mercury", 276.403216, "Capricorn", 6, false],
+        ["Venus", 335.425452, "Pisces", 8, false],
+        ["Mars", 335.320788, "Pisces", 8, false],
+        ["Jupiter", 275.131014, "Capricorn", 6, false],
+        ["Saturn", 213.497083, "Scorpio", 4, false],
+        ["Uranus", 233.27843, "Scorpio", 4, false],
+        ["Neptune", 248.926717, "Sagittarius", 5, false],
+        ["Pluto", 191.094504, "Libra", 3, false],
+        ["Rahu", 29.843037, "Aries", 9, true],
+        ["Ketu", 209.843037, "Libra", 3, true],
+      ],
+    },
+  },
+  {
+    id: "sydney-summer",
+    input: {
+      name: "Reference D",
+      location: "Sydney, Australia",
+      date: "2010-01-15",
+      time: "21:45:00",
+      timeConfidence: "exact",
+      uncertaintyMinutes: 15,
+      timezoneId: "Australia/Sydney",
+      latitude: -33.8688,
+      longitude: 151.2093,
+      placeProvider: "reference fixture",
+    },
+    expected: {
+      utc: "2010-01-15T10:45:00.000Z",
+      offset: "+11:00",
+      abbreviation: "AEDT",
+      ayanamsa: 23.997003,
+      ascendant: ["Aquarius", 2.259563],
+      panchang: ["Uttara Ashadha", 2, "Shukla Pratipada", "Shukla Paksha", "Harshana"],
+      planets: [
+        ["Sun", 271.177488, "Capricorn", 12, false],
+        ["Moon", 272.78367, "Capricorn", 12, false],
+        ["Mercury", 251.561726, "Sagittarius", 11, true],
+        ["Venus", 272.029987, "Capricorn", 12, false],
+        ["Mars", 111.240052, "Cancer", 6, true],
+        ["Jupiter", 305.417178, "Aquarius", 1, false],
+        ["Saturn", 160.651139, "Virgo", 8, true],
+        ["Uranus", 329.535537, "Aquarius", 1, false],
+        ["Neptune", 301.048379, "Aquarius", 1, false],
+        ["Pluto", 249.82301, "Sagittarius", 11, false],
+        ["Rahu", 266.868841, "Sagittarius", 11, true],
+        ["Ketu", 86.868841, "Gemini", 5, true],
+      ],
+    },
+  },
+  {
+    id: "kathmandu-quarter-offset",
+    input: {
+      name: "Reference E",
+      location: "Kathmandu, Nepal",
+      date: "1995-06-30",
+      time: "06:00:00",
+      timeConfidence: "approximate",
+      uncertaintyMinutes: 30,
+      timezoneId: "Asia/Kathmandu",
+      latitude: 27.7172,
+      longitude: 85.324,
+      placeProvider: "reference fixture",
+    },
+    expected: {
+      utc: "1995-06-30T00:15:00.000Z",
+      offset: "+05:45",
+      abbreviation: "+0545",
+      ayanamsa: 23.793775,
+      ascendant: ["Sagittarius", 23.839688],
+      panchang: ["Pushya", 1, "Shukla Dwitiya", "Shukla Paksha", "Vyaghata"],
+      planets: [
+        ["Sun", 73.985171, "Gemini", 7, false],
+        ["Moon", 95.814529, "Cancer", 8, false],
+        ["Mercury", 52.188653, "Taurus", 6, false],
+        ["Venus", 59.769493, "Taurus", 6, false],
+        ["Mars", 144.028484, "Leo", 9, false],
+        ["Jupiter", 223.408968, "Scorpio", 12, true],
+        ["Saturn", 330.92417, "Pisces", 4, false],
+        ["Uranus", 275.542141, "Capricorn", 2, true],
+        ["Neptune", 270.826786, "Capricorn", 2, true],
+        ["Pluto", 214.432036, "Scorpio", 12, true],
+        ["Rahu", 188.438571, "Libra", 11, true],
+        ["Ketu", 8.438571, "Aries", 5, true],
+      ],
+    },
+  },
+] as const;

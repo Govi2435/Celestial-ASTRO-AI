@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { CERTIFICATION_PROFILE } from "./certification-profile";
 import {
   ChartResult,
   formatDate,
@@ -332,6 +333,9 @@ function ReceiptPanel({ receipt }: { receipt: CalculationReceipt }) {
     ["Astronomy kernel", `${receipt.kernel} • ${receipt.kernelLicense}`],
     ["Reference validation", receipt.validationSummary],
     ["Validation profile", receipt.validationProfile],
+    ["P2 certificate", `${receipt.certificationId} • ${receipt.certificationStatus}`],
+    ["Certification profile", receipt.certificationProfile],
+    ["Certified coverage", receipt.certificationSummary],
     ["Input fingerprint", receipt.inputFingerprint],
     ["Calculated at", receipt.calculatedAt],
   ];
@@ -551,6 +555,8 @@ export default function Home() {
         `Engine: ${result.receipt.engineName} ${result.receipt.engineVersion} • ${result.receipt.engineStatus}`,
         `Kernel: ${result.receipt.kernel} • ${result.receipt.kernelLicense}`,
         `Validation: ${result.receipt.validationSummary}`,
+        `P2 certificate: ${result.receipt.certificationId} • ${result.receipt.certificationStatus}`,
+        `Certified coverage: ${result.receipt.certificationSummary}`,
       ].join("\n");
       const url = URL.createObjectURL(new Blob([report], { type: "text/plain" }));
       const link = document.createElement("a");
@@ -588,6 +594,8 @@ export default function Home() {
       `Engine: ${result.receipt.engineName} ${result.receipt.engineVersion}`,
       `Kernel: ${result.receipt.kernel} • ${result.receipt.kernelLicense}`,
       `Validation: ${result.receipt.validationSummary}`,
+      `P2 certificate: ${result.receipt.certificationId} • ${result.receipt.certificationStatus}`,
+      `Certified coverage: ${result.receipt.certificationSummary}`,
       "Method: apparent geocentric ecliptic-of-date positions; whole-sign houses; mean Rahu/Ketu.",
       `Receipt: ${result.receipt.chartId}`,
       `Fingerprint: ${result.receipt.inputFingerprint}`,
@@ -619,6 +627,7 @@ export default function Home() {
             Calculator
           </a>
           <a href="#method">Method</a>
+          <a href="#certification">Certification</a>
           <a href="#scope">Scope</a>
         </nav>
         <div className="local-badge">
@@ -630,7 +639,7 @@ export default function Home() {
       <section className="intro-band">
         <div>
           <span className="accuracy-pill">
-            <Sparkle size={13} /> P1 trust-first calculation pipeline
+            <Sparkle size={13} /> P2 reference chart certification passed
           </span>
           <h1>
             Your chart, calculated and
@@ -1090,10 +1099,72 @@ export default function Home() {
             <h3>Versioned receipt</h3>
             <p>
               Every successful result includes its normalized UTC, coordinates, timezone data, profile, active engine, method,
-              timestamp, and deterministic input fingerprint.
+              P2 certificate, timestamp, and deterministic input fingerprint.
             </p>
           </article>
         </div>
+      </section>
+
+      <section className="certification-section" id="certification">
+        <article className="certificate-panel">
+          <div className="certificate-heading">
+            <div className="certificate-seal" aria-label="P2 certification passed">
+              <span>P2</span>
+              <strong>PASS</strong>
+            </div>
+            <div>
+              <span className="eyebrow">REFERENCE CHART CERTIFICATION</span>
+              <h2>Reproducible across real-world time conditions.</h2>
+              <p>
+                This internal certificate locks complete chart outputs across five locations and verifies the same profile on every
+                future code change. It is evidence of reproducibility—not third-party accreditation or proof of predictions.
+              </p>
+            </div>
+            <span className="certificate-status">
+              <span className="live-dot" /> {CERTIFICATION_PROFILE.status}
+            </span>
+          </div>
+
+          <div className="certificate-stats">
+            <div>
+              <strong>{CERTIFICATION_PROFILE.referenceCharts}</strong>
+              <span>full reference charts</span>
+            </div>
+            <div>
+              <strong>{CERTIFICATION_PROFILE.placementSnapshots}</strong>
+              <span>planet and node placements</span>
+            </div>
+            <div>
+              <strong>{CERTIFICATION_PROFILE.externalPositionChecks}</strong>
+              <span>NASA/JPL comparisons</span>
+            </div>
+            <div>
+              <strong>{CERTIFICATION_PROFILE.timeScenarios}</strong>
+              <span>time-handling scenarios</span>
+            </div>
+          </div>
+
+          <div className="certificate-evidence">
+            <div>
+              <span>EXTERNAL REFERENCE</span>
+              <strong>NASA/JPL Horizons DE441</strong>
+              <p>Apparent geocentric planetary longitudes with a one-arcminute acceptance threshold.</p>
+            </div>
+            <div>
+              <span>PINNED REGRESSION</span>
+              <strong>India • USA • UK • Australia • Nepal</strong>
+              <p>Full placements, houses, Panchang, DST, UTC conversion, quarter-hour offset, and unknown-time suppression.</p>
+            </div>
+          </div>
+
+          <div className="certificate-footer">
+            <code>{CERTIFICATION_PROFILE.certificateId}</code>
+            <span>Issued {CERTIFICATION_PROFILE.issuedOn}</span>
+            <a href="/api/certification" target="_blank" rel="noreferrer">
+              View machine-readable certificate ↗
+            </a>
+          </div>
+        </article>
       </section>
 
       <section className="scope-section" id="scope">
@@ -1111,6 +1182,7 @@ export default function Home() {
             <li>Automatic place-to-IANA-timezone resolution</li>
             <li>Historical DST validation and Calculation Receipt</li>
             <li>Approximate-time stability and unknown-time ranges</li>
+            <li>P2 reference-chart regression certificate on every release</li>
           </ul>
         </div>
         <div className="not-calculated">
@@ -1124,6 +1196,7 @@ export default function Home() {
             <li>AI-generated personalized readings</li>
             <li>True-node and alternate ayanamsa profiles</li>
             <li>Accuracy claims beyond the documented kernel target and pinned reference set</li>
+            <li>Third-party accreditation or scientific validation of astrology</li>
           </ul>
         </div>
       </section>
@@ -1131,10 +1204,10 @@ export default function Home() {
       <section className="trust-note">
         <Sparkle />
         <div>
-          <strong>Free MIT accuracy route active</strong>
+          <strong>Free MIT accuracy route • P2 certification passed</strong>
           <p>
-            Every chart identifies the engine, kernel, licence, method IDs, timezone data, and NASA/JPL reference profile used.
-            Reference results prove the tested fixtures only; they are not a claim of perfect prediction or universal precision.
+            Every chart identifies the engine, kernel, licence, method IDs, timezone data, NASA/JPL reference profile, and P2
+            certificate used. Reference results prove the tested fixtures only; they are not a claim of perfect prediction.
           </p>
         </div>
       </section>
