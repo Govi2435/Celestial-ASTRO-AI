@@ -58,7 +58,7 @@ test("logout is POST-only, session-authenticated, CSRF guarded, throttled, and c
   assert.match(logoutRoute, /assertSessionCsrf/u);
   assert.match(logoutRoute, /AUTH_RATE_LIMITS\.logout/u);
   assert.match(logoutRoute, /enforceAuthRateLimit/u);
-  assert.match(logoutRoute, /revokeServerSession/u);
+  assert.match(logoutRoute, /revokeAuthenticatedServerSession/u);
   assert.match(logoutRoute, /clearServerSessionCookie/u);
 });
 
