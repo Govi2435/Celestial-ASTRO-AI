@@ -58,7 +58,10 @@ test("staging uses the locked local Wrangler CLI and only Cloudflare environment
   assert.match(workflow, /\.\/node_modules\/\.bin\/wrangler deploy --config wrangler\.staging\.jsonc/);
   assert.match(workflow, /read-wrangler-deploy-output\.mjs/);
   assert.doesNotMatch(workflow, /cloudflare\/wrangler-action/);
-  assert.doesNotMatch(workflow, /OPENAI_API_KEY|RAZORPAY_KEY|rzp_live|production/i);
+  assert.doesNotMatch(
+    workflow,
+    /OPENAI_API_KEY|RAZORPAY_KEY|GOOGLE_CLIENT_SECRET|GOOGLE_OAUTH_COOKIE_SECRET|rzp_live|production/i,
+  );
 });
 
 test("structured Wrangler output produces the staging deployment URL", () => {
@@ -108,6 +111,17 @@ test("staging smoke verifies the authentication compatibility contract", () => {
   assert.match(smokeScript, /tokenHashing/);
   assert.match(smokeScript, /mode=redirect/);
   assert.doesNotMatch(smokeScript, /console\.log\([^\n]*(cookiePair|setCookie)/);
+});
+
+test("staging smoke verifies Google OAuth configuration or a safe authorization redirect", () => {
+  assert.match(smokeScript, /\/api\/auth\/google\/start/);
+  assert.match(smokeScript, /google_oauth_not_configured/);
+  assert.match(smokeScript, /https:\/\/accounts\.google\.com/);
+  assert.match(smokeScript, /\/o\/oauth2\/v2\/auth/);
+  assert.match(smokeScript, /code_challenge_method/);
+  assert.match(smokeScript, /__Host-celestial_google_oauth=/);
+  assert.match(smokeScript, /SameSite=Lax/);
+  assert.doesNotMatch(smokeScript, /GOOGLE_CLIENT_SECRET|GOOGLE_OAUTH_COOKIE_SECRET/);
 });
 
 test("Wrangler staging config is isolated and has only current bindings", () => {

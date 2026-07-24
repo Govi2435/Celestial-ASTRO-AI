@@ -40,6 +40,48 @@ function firstSetCookie(headers) {
   return headers.get("set-cookie");
 }
 
+async function verifyGoogleOAuthStart() {
+  const googleStart = await request("/api/auth/google/start?returnTo=%2Faccount", {
+    redirect: "manual",
+  });
+
+  if (googleStart.response.status === 503) {
+    const payload = await googleStart.response.json();
+    assert.equal(payload.error, "google_oauth_not_configured");
+    assert.equal(
+      googleStart.response.headers.get("x-celestial-google-oauth"),
+      "configuration-required",
+    );
+    return "configuration-pending";
+  }
+
+  assert.equal(googleStart.response.status, 302, "Google OAuth start must redirect when configured.");
+  const location = new URL(googleStart.response.headers.get("location") ?? "");
+  assert.equal(location.origin, "https://accounts.google.com");
+  assert.equal(location.pathname, "/o/oauth2/v2/auth");
+  assert.equal(location.searchParams.get("response_type"), "code");
+  assert.equal(location.searchParams.get("redirect_uri"), new URL("/api/auth/google/callback", baseUrl).toString());
+  assert.equal(location.searchParams.get("code_challenge_method"), "S256");
+  assert.equal(location.searchParams.get("access_type"), "online");
+  assert.equal(location.searchParams.get("prompt"), "select_account");
+  assert.match(location.searchParams.get("state") ?? "", /^[A-Za-z0-9_-]{43}$/u);
+  assert.match(location.searchParams.get("nonce") ?? "", /^[A-Za-z0-9_-]{43}$/u);
+  assert.match(location.searchParams.get("code_challenge") ?? "", /^[A-Za-z0-9_-]{43}$/u);
+  assert.deepEqual(
+    new Set((location.searchParams.get("scope") ?? "").split(" ")),
+    new Set(["openid", "email", "profile"]),
+  );
+
+  const setCookie = firstSetCookie(googleStart.response.headers);
+  assert.ok(setCookie?.startsWith("__Host-celestial_google_oauth="), "Google OAuth transaction cookie is missing.");
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /Secure/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  assert.match(setCookie, /Max-Age=600/i);
+  assert.doesNotMatch(setCookie, /Domain=/i);
+  return "authorization-ready";
+}
+
 async function verify() {
   const homepage = await request("/");
   assert.equal(homepage.response.status, 200, `Homepage returned ${homepage.response.status}.`);
@@ -123,10 +165,13 @@ async function verify() {
   assert.equal(clearProbe.response.status, 204, "Auth cookie clear request failed.");
   assert.match(firstSetCookie(clearProbe.response.headers) ?? "", /Max-Age=0/i, "Auth cookie was not cleared.");
 
+  const googleOAuth = await verifyGoogleOAuthStart();
+
   return {
     homepage: homepage.target.href,
     certification: certification.target.href,
     authCompatibility: authProbe.target.href,
+    googleOAuth,
     certificateHeader: certification.response.headers.get("x-celestial-certificate"),
   };
 }
@@ -139,6 +184,7 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
     console.log(`[staging-smoke] homepage=${result.homepage}`);
     console.log(`[staging-smoke] certification=${result.certification}`);
     console.log(`[staging-smoke] authCompatibility=${result.authCompatibility}`);
+    console.log(`[staging-smoke] googleOAuth=${result.googleOAuth}`);
     console.log(
       `[staging-smoke] certificate=${result.certificateHeader ?? "header-not-present"}`,
     );
