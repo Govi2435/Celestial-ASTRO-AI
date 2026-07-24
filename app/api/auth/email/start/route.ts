@@ -1,0 +1,195 @@
+import { sanitizeReturnTo } from "../../../../auth-compatibility.ts";
+import { sendEmailMagicLink } from "../../../../email-magic-link-delivery.ts";
+import {
+  EmailMagicLinkError,
+  createEmailMagicLink,
+} from "../../../../email-magic-link.ts";
+import { loadEmailMagicLinkRuntime } from "../../../../email-magic-link-runtime.ts";
+
+export const dynamic = "force-dynamic";
+
+const COMMON_HEADERS = {
+  "Cache-Control": "no-store, max-age=0",
+  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Referrer-Policy": "no-referrer",
+  "X-Content-Type-Options": "nosniff",
+} as const;
+
+function notFound() {
+  return Response.json({ error: "not_found" }, { status: 404, headers: COMMON_HEADERS });
+}
+
+function notConfigured() {
+  return Response.json(
+    {
+      error: "email_magic_link_not_configured",
+      message: "Email magic-link sign-in is not configured for this environment.",
+    },
+    {
+      status: 503,
+      headers: {
+        ...COMMON_HEADERS,
+        "Retry-After": "3600",
+        "X-Celestial-Email-Magic": "configuration-required",
+      },
+    },
+  );
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function requestForm(returnTo: string) {
+  const headers = new Headers(COMMON_HEADERS);
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.set("X-Celestial-Email-Magic", "request-ready");
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sign in by email</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:38rem;margin:4rem auto;padding:0 1.25rem;line-height:1.6;color:#171717}main{border:1px solid #d4d4d4;border-radius:1rem;padding:1.5rem}h1{font-size:1.45rem;margin-top:0}label{display:block;font-weight:700;margin-bottom:.35rem}input{box-sizing:border-box;width:100%;padding:.75rem;border:1px solid #a3a3a3;border-radius:.55rem;font:inherit}button{margin-top:1rem;padding:.75rem 1rem;border:0;border-radius:.65rem;background:#171717;color:#fff;font:inherit;font-weight:700;cursor:pointer}.note{color:#525252;font-size:.95rem}</style>
+</head>
+<body>
+  <main>
+    <h1>Sign in by email</h1>
+    <form method="post" action="/api/auth/email/start">
+      <label for="email">Email address</label>
+      <input id="email" name="email" type="email" inputmode="email" autocomplete="email" maxlength="320" required>
+      <input name="returnTo" type="hidden" value="${escapeHtml(returnTo)}">
+      <button type="submit">Send secure sign-in link</button>
+    </form>
+    <p class="note">The link expires in 10 minutes and must be opened in this browser. This staging flow verifies email only; it does not create an account or session yet.</p>
+  </main>
+</body>
+</html>`;
+  return new Response(html, { status: 200, headers });
+}
+
+function sentResponse(cookie: string) {
+  const headers = new Headers(COMMON_HEADERS);
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.set("X-Celestial-Email-Magic", "link-sent");
+  headers.append("Set-Cookie", cookie);
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Check your email</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:38rem;margin:4rem auto;padding:0 1.25rem;line-height:1.6;color:#171717}main{border:1px solid #d4d4d4;border-radius:1rem;padding:1.5rem}h1{font-size:1.45rem;margin-top:0}.note{color:#525252}</style>
+</head>
+<body>
+  <main>
+    <h1>Check your email</h1>
+    <p>A secure sign-in link was requested. Open it in this same browser within 10 minutes.</p>
+    <p class="note">This response does not confirm whether an account exists. This staging flow does not create an account or authenticated session yet.</p>
+  </main>
+</body>
+</html>`;
+  return new Response(html, { status: 202, headers });
+}
+
+async function parseRequestBody(request: Request) {
+  const declaredLength = Number.parseInt(request.headers.get("content-length") ?? "0", 10);
+  if (Number.isFinite(declaredLength) && declaredLength > 4096) {
+    throw new EmailMagicLinkError("request_too_large", 413);
+  }
+  const raw = await request.text();
+  if (raw.length > 4096) throw new EmailMagicLinkError("request_too_large", 413);
+  const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+
+  if (contentType === "application/json") {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      throw new EmailMagicLinkError("request_invalid");
+    }
+    if (typeof payload !== "object" || payload === null) {
+      throw new EmailMagicLinkError("request_invalid");
+    }
+    const input = payload as Record<string, unknown>;
+    return { email: input.email, returnTo: input.returnTo };
+  }
+
+  if (contentType === "application/x-www-form-urlencoded") {
+    const form = new URLSearchParams(raw);
+    return { email: form.get("email"), returnTo: form.get("returnTo") };
+  }
+
+  throw new EmailMagicLinkError("content_type_unsupported", 415);
+}
+
+function errorResponse(error: unknown) {
+  const diagnostic =
+    error instanceof EmailMagicLinkError
+      ? { code: error.code, status: error.status }
+      : { code: "email_magic_start_unexpected", status: 500 };
+  console.warn("Email magic-link request rejected", {
+    code: diagnostic.code,
+    status: diagnostic.status,
+  });
+  const safeStatus = diagnostic.status >= 500 ? diagnostic.status : diagnostic.status;
+  return Response.json(
+    {
+      error: diagnostic.code,
+      message:
+        safeStatus >= 500
+          ? "The sign-in email could not be sent. Try again later."
+          : "Enter a valid email address and try again.",
+    },
+    {
+      status: safeStatus,
+      headers: {
+        ...COMMON_HEADERS,
+        "X-Celestial-Email-Magic": "request-rejected",
+        "X-Celestial-Email-Magic-Error": diagnostic.code,
+      },
+    },
+  );
+}
+
+export async function GET(request: Request) {
+  const runtime = await loadEmailMagicLinkRuntime();
+  if (runtime.appEnv !== "staging") return notFound();
+  if (!runtime.config) return notConfigured();
+  const requestUrl = new URL(request.url);
+  if (requestUrl.protocol !== "https:") return notFound();
+  return requestForm(sanitizeReturnTo(requestUrl.searchParams.get("returnTo"), "/"));
+}
+
+export async function POST(request: Request) {
+  const runtime = await loadEmailMagicLinkRuntime();
+  if (runtime.appEnv !== "staging") return notFound();
+  if (!runtime.config) return notConfigured();
+  const requestUrl = new URL(request.url);
+  if (requestUrl.protocol !== "https:") return notFound();
+
+  try {
+    const input = await parseRequestBody(request);
+    const magicLink = await createEmailMagicLink(
+      input.email,
+      requestUrl.origin,
+      input.returnTo,
+      runtime.config.secret,
+    );
+    await sendEmailMagicLink(
+      runtime.config,
+      magicLink.email,
+      magicLink.verificationUrl,
+      magicLink.fingerprint,
+    );
+    return sentResponse(magicLink.cookie);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
