@@ -31,42 +31,25 @@ function notConfigured() {
   );
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function authorizationHandoff(authorizationUrl: string, cookie: string) {
-  const target = new URL(authorizationUrl);
-  if (target.origin !== "https://accounts.google.com" || target.pathname !== "/o/oauth2/v2/auth") {
-    throw new Error("Unexpected Google authorization target.");
-  }
-
+function authorizationCheckpoint(cookie: string) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
-  headers.set("Refresh", `0;url=${authorizationUrl}`);
   headers.append("Set-Cookie", cookie);
-  headers.set("X-Celestial-Google-OAuth", "authorization-handoff");
+  headers.set("X-Celestial-Google-OAuth", "cookie-checkpoint");
 
-  const escapedTarget = escapeHtml(authorizationUrl);
   const html = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="0;url=${escapedTarget}">
   <title>Continue with Google</title>
-  <style>body{font-family:system-ui,sans-serif;max-width:38rem;margin:4rem auto;padding:0 1.25rem;line-height:1.6;color:#171717}main{border:1px solid #d4d4d4;border-radius:1rem;padding:1.5rem}h1{font-size:1.4rem;margin-top:0}a{font-weight:700}</style>
+  <style>body{font-family:system-ui,sans-serif;max-width:38rem;margin:4rem auto;padding:0 1.25rem;line-height:1.6;color:#171717}main{border:1px solid #d4d4d4;border-radius:1rem;padding:1.5rem}h1{font-size:1.4rem;margin-top:0}a{display:inline-block;margin-top:.5rem;padding:.75rem 1rem;border-radius:.65rem;background:#171717;color:#fff;text-decoration:none;font-weight:700}</style>
 </head>
 <body>
   <main>
     <h1>Continue with Google</h1>
-    <p>Your secure sign-in transaction is ready.</p>
-    <p><a href="${escapedTarget}" rel="noreferrer">Continue with Google</a></p>
+    <p>Your secure sign-in transaction has been saved in this browser.</p>
+    <p><a href="/api/auth/google/continue">Continue with Google</a></p>
   </main>
 </body>
 </html>`;
@@ -89,7 +72,7 @@ export async function GET(request: Request) {
       redirectUri,
       requestUrl.searchParams.get("returnTo"),
     );
-    return authorizationHandoff(authorization.authorizationUrl, authorization.cookie);
+    return authorizationCheckpoint(authorization.cookie);
   } catch {
     return Response.json(
       { error: "google_oauth_start_failed" },
