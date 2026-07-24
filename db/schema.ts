@@ -76,12 +76,30 @@ export const authSessions = sqliteTable(
     revokedAt: text("revoked_at"),
     revokeReason: text("revoke_reason").notNull().default(""),
     rotationCount: integer("rotation_count").notNull().default(0),
+    csrfTokenHash: text("csrf_token_hash").notNull().default(""),
+    csrfIssuedAt: text("csrf_issued_at").notNull().default(""),
   },
   (table) => [
     uniqueIndex("auth_sessions_token_hash_unique").on(table.tokenHash),
     index("auth_sessions_account_idx").on(table.accountId),
     index("auth_sessions_account_active_idx").on(table.accountId, table.revokedAt),
     index("auth_sessions_expiry_idx").on(table.expiresAt),
+  ],
+);
+
+export const authRateLimits = sqliteTable(
+  "auth_rate_limits",
+  {
+    bucketHash: text("bucket_hash").primaryKey(),
+    scope: text("scope").notNull(),
+    windowStartedAt: integer("window_started_at").notNull(),
+    windowExpiresAt: integer("window_expires_at").notNull(),
+    requestCount: integer("request_count").notNull().default(0),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("auth_rate_limits_scope_idx").on(table.scope),
+    index("auth_rate_limits_expiry_idx").on(table.windowExpiresAt),
   ],
 );
 
