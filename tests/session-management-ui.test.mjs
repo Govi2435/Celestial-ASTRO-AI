@@ -27,6 +27,16 @@ const core = readFileSync(
   "utf8",
 );
 
+const requestSecurity = readFileSync(
+  new URL("../app/request-security.ts", import.meta.url),
+  "utf8",
+);
+
+const rateLimit = readFileSync(
+  new URL("../app/auth-rate-limit.ts", import.meta.url),
+  "utf8",
+);
+
 test("session console exposes accessible authenticated and anonymous states", () => {
   assert.match(page, /Your signed-in/);
   assert.match(page, /Sign in to manage sessions/);
@@ -40,26 +50,41 @@ test("session console exposes accessible authenticated and anonymous states", ()
   assert.match(page, /Token-safe by design/);
 });
 
-test("session UI uses credentialed server routes without reading cookies", () => {
+test("session UI sends server-issued CSRF tokens without reading cookies", () => {
   assert.match(page, /fetch\("\/api\/auth\/sessions"/);
   assert.match(page, /fetch\("\/api\/auth\/logout"/);
   assert.match(page, /credentials: "include"/);
+  assert.match(page, /csrfToken/);
+  assert.match(page, /"X-Celestial-CSRF": view\.csrfToken/);
   assert.doesNotMatch(page, /document\.cookie|localStorage|sessionStorage/);
   assert.doesNotMatch(page, /tokenHash|token_hash/);
   assert.match(logout, /clearServerSessionCookie/);
 });
 
-test("management API authenticates every request and applies same-origin mutation checks", () => {
+test("management API authenticates, verifies CSRF, and rate limits every mutation", () => {
   assert.match(route, /authenticateServerSession/);
-  assert.match(route, /mutationAllowed/);
-  assert.match(route, /request\.headers\.get\("origin"\)/);
-  assert.match(route, /request\.headers\.get\("sec-fetch-site"\)/);
-  assert.match(route, /session_management_origin_rejected/);
+  assert.match(route, /assertTrustedMutation/);
+  assert.match(route, /assertSessionCsrf/);
+  assert.match(route, /issueSessionCsrf/);
+  assert.match(route, /AUTH_RATE_LIMITS\.sessionMutation/);
+  assert.match(route, /enforceAuthRateLimit/);
   assert.match(route, /session_management_content_type_invalid/);
   assert.match(route, /revokeManagedSession/);
   assert.match(route, /revokeOtherManagedSessions/);
   assert.match(route, /clearServerSessionCookie/);
   assert.doesNotMatch(route, /tokenHash|token_hash/);
+  assert.match(logout, /assertSessionCsrf/);
+  assert.match(logout, /AUTH_RATE_LIMITS\.logout/);
+});
+
+test("request security rejects cross-site mutations and stores only CSRF hashes", () => {
+  assert.match(requestSecurity, /origin !== requestUrl\.origin/);
+  assert.match(requestSecurity, /sec-fetch-site/);
+  assert.match(requestSecurity, /sha256Base64Url\(token\)/);
+  assert.match(store, /csrf_token_hash = \?/);
+  assert.match(store, /matchesSessionCsrfTokenHash/);
+  assert.doesNotMatch(store, /csrf_token(?!_hash)/);
+  assert.match(rateLimit, /sha256Base64Url\(`\$\{profile\.scope\}\\n\$\{keyMaterial\}`\)/);
 });
 
 test("D1 mutations are scoped to the authenticated account", () => {
