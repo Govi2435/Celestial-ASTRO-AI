@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const D1_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
+function configRelativePath(outputPath, targetPath) {
+  const relativePath = relative(dirname(outputPath), targetPath);
+  assert.ok(relativePath, "Runtime config path must not replace the migrations directory.");
+  return relativePath.split(sep).join("/");
+}
+
 export function prepareStagingWranglerConfig({
   inputPath = resolve(projectRoot, "wrangler.staging.jsonc"),
   outputPath = resolve(projectRoot, ".wrangler/wrangler.staging.runtime.json"),
   databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID?.trim() ?? "",
+  migrationsPath = resolve(projectRoot, "drizzle"),
 } = {}) {
   const config = JSON.parse(readFileSync(inputPath, "utf8"));
   delete config.d1_databases;
@@ -22,7 +29,7 @@ export function prepareStagingWranglerConfig({
         binding: "DB",
         database_name: "cosmicsphere-staging-db",
         database_id: databaseId,
-        migrations_dir: "drizzle",
+        migrations_dir: configRelativePath(outputPath, migrationsPath),
       },
     ];
     accountPersistence = "ready";

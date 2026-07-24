@@ -41,7 +41,7 @@ export function assertSafeStagingConfig(config, { allowD1 = false } = {}) {
       {
         binding: "DB",
         database_name: "cosmicsphere-staging-db",
-        migrations_dir: "drizzle",
+        migrations_dir: "../drizzle",
       },
     );
     assert.match(binding.database_id, D1_ID_PATTERN);
