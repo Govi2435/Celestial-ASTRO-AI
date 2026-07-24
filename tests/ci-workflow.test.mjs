@@ -39,10 +39,10 @@ test("CI exposes independent quality, migration, and test jobs", () => {
   assert.match(workflow, /run: npm run lint/);
   assert.match(workflow, /run: npm run typecheck/);
   assert.match(workflow, /run: npm run db:validate/);
-  assert.match(workflow, /run: npm test/);
+  assert.match(workflow, /run: npm run test:ci/);
 });
 
-test("repository commands keep strict quality and migration contracts", () => {
+test("repository commands keep strict quality, migration, and artifact contracts", () => {
   assert.match(packageJson.scripts.lint, /eslint/);
   assert.match(packageJson.scripts.typecheck, /tsc --noEmit --pretty false/);
   assert.equal(packageJson.scripts["db:validate"], "node scripts/validate-migrations.mjs");
@@ -50,6 +50,31 @@ test("repository commands keep strict quality and migration contracts", () => {
     packageJson.scripts["db:baseline"],
     "node scripts/validate-migrations.mjs --write",
   );
+  assert.equal(packageJson.scripts["test:ci"], "bash scripts/run-ci-test-evidence.sh");
+  assert.equal(
+    packageJson.scripts["artifact:validate"],
+    "node scripts/validate-ci-test-artifact.mjs artifacts/ci/test",
+  );
+});
+
+test("test evidence is validated and uploaded even when tests fail", () => {
+  assert.match(workflow, /id: artifact_safety/);
+  assert.match(workflow, /if: \$\{\{ always\(\) \}\}/);
+  assert.match(workflow, /run: npm run artifact:validate/);
+  assert.match(workflow, /uses: actions\/upload-artifact@v7/);
+  assert.match(
+    workflow,
+    /if: \$\{\{ always\(\) && steps\.artifact_safety\.outcome == 'success' \}\}/,
+  );
+  assert.match(
+    workflow,
+    /name: ci-test-evidence-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/,
+  );
+  assert.match(workflow, /path: artifacts\/ci\/test/);
+  assert.match(workflow, /if-no-files-found: error/);
+  assert.match(workflow, /retention-days: 14/);
+  assert.match(workflow, /compression-level: 9/);
+  assert.match(workflow, /include-hidden-files: false/);
 });
 
 test("all CI jobs install from the committed lockfile", () => {
