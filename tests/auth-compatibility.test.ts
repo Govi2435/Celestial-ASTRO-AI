@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   AUTH_COMPATIBILITY_PROFILE,
@@ -12,6 +13,10 @@ import {
 } from "../app/auth-compatibility.ts";
 
 const base64UrlPattern = /^[A-Za-z0-9_-]+$/;
+const routeSource = readFileSync(
+  new URL("../app/api/auth/compatibility/route.ts", import.meta.url),
+  "utf8",
+);
 
 test("secure random tokens are bounded base64url values", () => {
   const first = randomBase64Url(32);
@@ -62,4 +67,14 @@ test("OAuth return targets remain same-origin relative paths", () => {
   assert.equal(sanitizeReturnTo("//evil.example/steal"), "/");
   assert.equal(sanitizeReturnTo("/\\evil.example"), "/");
   assert.equal(sanitizeReturnTo(undefined, "/account"), "/account");
+});
+
+test("compatibility probe is staging-only and does not claim authentication", () => {
+  assert.match(routeSource, /env\.APP_ENV === "staging"/);
+  assert.match(routeSource, /status: 404/);
+  assert.match(routeSource, /Staging compatibility probe only/);
+  assert.match(routeSource, /This does not create an account or authenticated session/);
+  assert.match(routeSource, /"Cache-Control": "no-store, max-age=0"/);
+  assert.doesNotMatch(routeSource, /OPENAI_API_KEY|RAZORPAY|GOOGLE_CLIENT_SECRET|MAGIC_LINK_SECRET/);
+  assert.doesNotMatch(routeSource, /console\.(log|error|warn)/);
 });
