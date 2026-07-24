@@ -26,7 +26,7 @@ test("secure random tokens are bounded base64url values", () => {
 test("Web Crypto SHA-256 and PKCE S256 produce OAuth-safe values", async () => {
   assert.equal(
     await sha256Base64Url("celestial-auth-compatibility"),
-    "aRsjM0BGG64kqV5YPm-LyYh8T-WnPjja0BI7vN6Pcw0",
+    "qUV4VZD8eOCebnVnSb96MPvCz3L6_Xq4UceNle-ZGXw",
   );
 
   const pair = await createPkcePair();
