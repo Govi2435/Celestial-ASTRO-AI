@@ -7,6 +7,7 @@ import {
   verifyGoogleIdToken,
   verifyGoogleOAuthTransaction,
 } from "../../../../google-oauth.ts";
+import { getGoogleOAuthDiagnostic } from "../../../../google-oauth-diagnostics.ts";
 import { loadGoogleOAuthRuntime } from "../../../../google-oauth-runtime.ts";
 
 export const dynamic = "force-dynamic";
@@ -27,23 +28,31 @@ function htmlResponse(
   title: string,
   message: string,
   outcome: string,
+  diagnosticCode?: string,
 ) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Google-OAuth", outcome);
+  if (diagnosticCode) {
+    headers.set("X-Celestial-Google-OAuth-Error", diagnosticCode);
+  }
   headers.append("Set-Cookie", clearGoogleOAuthCookie());
+  const diagnostic = diagnosticCode
+    ? `<p class="diagnostic">Diagnostic code: <code>${diagnosticCode}</code></p>`
+    : "";
   const html = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${title}</title>
-  <style>body{font-family:system-ui,sans-serif;max-width:42rem;margin:4rem auto;padding:0 1.25rem;line-height:1.6;color:#171717}main{border:1px solid #d4d4d4;border-radius:1rem;padding:1.5rem}h1{font-size:1.5rem;margin-top:0}.note{color:#525252}</style>
+  <style>body{font-family:system-ui,sans-serif;max-width:42rem;margin:4rem auto;padding:0 1.25rem;line-height:1.6;color:#171717}main{border:1px solid #d4d4d4;border-radius:1rem;padding:1.5rem}h1{font-size:1.5rem;margin-top:0}.note{color:#525252}.diagnostic{margin-top:1rem;padding:.75rem;border-radius:.5rem;background:#f5f5f5;color:#404040}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}</style>
 </head>
 <body>
   <main>
     <h1>${title}</h1>
     <p>${message}</p>
+    ${diagnostic}
     <p class="note">This staging flow does not create a Celestial account or authenticated session yet.</p>
   </main>
 </body>
@@ -60,6 +69,7 @@ export async function GET(request: Request) {
       "Google sign-in unavailable",
       "Google sign-in is not configured for this environment.",
       "configuration-required",
+      "google_oauth_not_configured",
     );
   }
 
@@ -73,6 +83,7 @@ export async function GET(request: Request) {
       "Google sign-in cancelled",
       "Google did not complete the authorization request.",
       "provider-declined",
+      "google_provider_declined",
     );
   }
 
@@ -109,13 +120,18 @@ export async function GET(request: Request) {
       "identity-verified",
     );
   } catch (error) {
-    const status = error instanceof GoogleOAuthError ? error.status : 500;
-    const safeStatus = status >= 500 ? 502 : 400;
+    const diagnostic = getGoogleOAuthDiagnostic(error);
+    console.warn("Google OAuth callback rejected", {
+      code: diagnostic.code,
+      status: diagnostic.status,
+    });
+    const safeStatus = diagnostic.status >= 500 ? 502 : 400;
     return htmlResponse(
       safeStatus,
       "Google sign-in could not be verified",
       "The authorization response was rejected. Start a new sign-in attempt.",
       "verification-failed",
+      diagnostic.code,
     );
   }
 }
