@@ -58,17 +58,38 @@ async function verifyGoogleOAuthStart() {
   assert.equal(googleStart.response.status, 200, "Google OAuth start must commit the cookie before navigation.");
   assert.equal(
     googleStart.response.headers.get("x-celestial-google-oauth"),
-    "authorization-handoff",
+    "cookie-checkpoint",
   );
   assert.match(
     googleStart.response.headers.get("content-type") ?? "",
     /text\/html/i,
-    "Google OAuth handoff must return HTML.",
+    "Google OAuth checkpoint must return HTML.",
+  );
+  assert.equal(googleStart.response.headers.get("refresh"), null, "Checkpoint must not auto-forward cross-site.");
+
+  const setCookie = firstSetCookie(googleStart.response.headers);
+  assert.ok(setCookie?.startsWith("__Host-celestial_google_oauth="), "Google OAuth transaction cookie is missing.");
+  assert.match(setCookie, /HttpOnly/i);
+  assert.match(setCookie, /Secure/i);
+  assert.match(setCookie, /SameSite=Lax/i);
+  assert.match(setCookie, /Max-Age=600/i);
+  assert.doesNotMatch(setCookie, /Domain=/i);
+  const cookiePair = setCookie.split(";", 1)[0];
+
+  const handoffBody = await googleStart.response.text();
+  assert.match(handoffBody, /href="\/api\/auth\/google\/continue"/i, "Google OAuth checkpoint link is missing.");
+
+  const googleContinue = await request("/api/auth/google/continue", {
+    redirect: "manual",
+    headers: { Cookie: cookiePair },
+  });
+  assert.equal(googleContinue.response.status, 302, "Google OAuth checkpoint must redirect after cookie verification.");
+  assert.equal(
+    googleContinue.response.headers.get("x-celestial-google-oauth"),
+    "checkpoint-passed",
   );
 
-  const refresh = googleStart.response.headers.get("refresh") ?? "";
-  assert.match(refresh, /^0;url=https:\/\/accounts\.google\.com\//u);
-  const location = new URL(refresh.replace(/^0;url=/u, ""));
+  const location = new URL(googleContinue.response.headers.get("location") ?? "");
   assert.equal(location.origin, "https://accounts.google.com");
   assert.equal(location.pathname, "/o/oauth2/v2/auth");
   assert.equal(location.searchParams.get("response_type"), "code");
@@ -84,16 +105,6 @@ async function verifyGoogleOAuthStart() {
     new Set(["openid", "email", "profile"]),
   );
 
-  const setCookie = firstSetCookie(googleStart.response.headers);
-  assert.ok(setCookie?.startsWith("__Host-celestial_google_oauth="), "Google OAuth transaction cookie is missing.");
-  assert.match(setCookie, /HttpOnly/i);
-  assert.match(setCookie, /Secure/i);
-  assert.match(setCookie, /SameSite=Lax/i);
-  assert.match(setCookie, /Max-Age=600/i);
-  assert.doesNotMatch(setCookie, /Domain=/i);
-
-  const handoffBody = await googleStart.response.text();
-  assert.match(handoffBody, /Continue with Google/i, "Google OAuth handoff marker is missing.");
   return "authorization-ready";
 }
 
