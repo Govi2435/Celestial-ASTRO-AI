@@ -46,6 +46,11 @@ export type VerifiedGoogleIdentity = {
   pictureUrl: string | null;
 };
 
+export type FetchLike = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
+
 export class GoogleOAuthError extends Error {
   readonly code: string;
   readonly status: number;
@@ -58,13 +63,13 @@ export class GoogleOAuthError extends Error {
   }
 }
 
-function bytesToBase64Url(bytes: Uint8Array) {
+function bytesToBase64Url(bytes: Uint8Array<ArrayBufferLike>) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
 }
 
-function base64UrlToBytes(value: string) {
+function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   if (!BASE64URL_PATTERN.test(value)) throw new GoogleOAuthError("invalid_base64url");
   const padded = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
   let binary: string;
@@ -172,7 +177,11 @@ export function validateGoogleOAuthTransaction(value: unknown): GoogleOAuthTrans
   if (typeof value !== "object" || value === null) throw new GoogleOAuthError("oauth_transaction_invalid");
   const input = value as Record<string, unknown>;
   if (input.version !== 1) throw new GoogleOAuthError("oauth_transaction_invalid");
-  if (!Number.isSafeInteger(input.issuedAt) || (input.issuedAt as number) <= 0) {
+  if (
+    typeof input.issuedAt !== "number" ||
+    !Number.isSafeInteger(input.issuedAt) ||
+    input.issuedAt <= 0
+  ) {
     throw new GoogleOAuthError("oauth_transaction_invalid");
   }
   return {
@@ -181,7 +190,7 @@ export function validateGoogleOAuthTransaction(value: unknown): GoogleOAuthTrans
     nonce: assertBase64UrlToken(input.nonce, "oauth_nonce_invalid"),
     codeVerifier: assertBase64UrlToken(input.codeVerifier, "oauth_code_verifier_invalid", 43, 128),
     returnTo: sanitizeReturnTo(input.returnTo, "/"),
-    issuedAt: input.issuedAt as number,
+    issuedAt: input.issuedAt,
   };
 }
 
@@ -275,7 +284,7 @@ export async function exchangeGoogleAuthorizationCode(
   codeInput: unknown,
   codeVerifierInput: unknown,
   redirectUriInput: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: FetchLike = fetch,
 ) {
   const config = validateConfig(configInput);
   const code = assertBoundedText(codeInput, "authorization_code_invalid", 4096);
@@ -326,8 +335,8 @@ export async function exchangeGoogleAuthorizationCode(
 type ParsedJwt = {
   header: Record<string, unknown>;
   claims: Record<string, unknown>;
-  signingInput: Uint8Array;
-  signature: Uint8Array;
+  signingInput: Uint8Array<ArrayBuffer>;
+  signature: Uint8Array<ArrayBuffer>;
 };
 
 function parseJwt(jwt: string): ParsedJwt {
@@ -372,7 +381,7 @@ export async function verifyGoogleIdToken(
     clientId: string;
     nonce: string;
     now?: number;
-    fetchImpl?: typeof fetch;
+    fetchImpl?: FetchLike;
   },
 ): Promise<VerifiedGoogleIdentity> {
   const clientId = assertBoundedText(options.clientId, "google_client_id_invalid", 512);
