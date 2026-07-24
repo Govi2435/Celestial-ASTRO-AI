@@ -1,3 +1,10 @@
+import { D1AccountIdentityStore } from "../../../../account-identity-d1.ts";
+import {
+  AccountPersistenceError,
+  registerDurableMagicLink,
+  revokeDurableMagicLink,
+} from "../../../../account-identity-persistence.ts";
+import { loadAccountPersistenceRuntime } from "../../../../account-persistence-runtime.ts";
 import { sanitizeReturnTo } from "../../../../auth-compatibility.ts";
 import { sendEmailMagicLink } from "../../../../email-magic-link-delivery.ts";
 import {
@@ -20,18 +27,17 @@ function notFound() {
   return Response.json({ error: "not_found" }, { status: 404, headers: COMMON_HEADERS });
 }
 
-function notConfigured() {
+function notConfigured(error: string, message: string) {
   return Response.json(
-    {
-      error: "email_magic_link_not_configured",
-      message: "Email magic-link sign-in is not configured for this environment.",
-    },
+    { error, message },
     {
       status: 503,
       headers: {
         ...COMMON_HEADERS,
         "Retry-After": "3600",
         "X-Celestial-Email-Magic": "configuration-required",
+        "X-Celestial-Account-Persistence":
+          error === "account_persistence_not_configured" ? "configuration-required" : "provider-ready",
       },
     },
   );
@@ -50,6 +56,7 @@ function requestForm(returnTo: string) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Email-Magic", "request-ready");
+  headers.set("X-Celestial-Account-Persistence", "ready");
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -67,7 +74,7 @@ function requestForm(returnTo: string) {
       <input name="returnTo" type="hidden" value="${escapeHtml(returnTo)}">
       <button type="submit">Send secure sign-in link</button>
     </form>
-    <p class="note">The link expires in 10 minutes and must be opened in this browser. This staging flow verifies email only; it does not create an account or session yet.</p>
+    <p class="note">The link expires in 10 minutes and may be opened in any browser. A verified account identity will be stored; session creation is added in ASTRO-125.</p>
   </main>
 </body>
 </html>`;
@@ -78,6 +85,7 @@ function sentResponse(cookie: string) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Email-Magic", "link-sent");
+  headers.set("X-Celestial-Account-Persistence", "token-registered");
   headers.append("Set-Cookie", cookie);
   const html = `<!doctype html>
 <html lang="en">
@@ -90,8 +98,8 @@ function sentResponse(cookie: string) {
 <body>
   <main>
     <h1>Check your email</h1>
-    <p>A secure sign-in link was requested. Open it in this same browser within 10 minutes.</p>
-    <p class="note">This response does not confirm whether an account exists. This staging flow does not create an account or authenticated session yet.</p>
+    <p>A secure sign-in link was requested. Open it within 10 minutes.</p>
+    <p class="note">This response does not confirm whether an account exists. The link can be consumed only once.</p>
   </main>
 </body>
 </html>`;
@@ -114,9 +122,7 @@ async function parseRequestBody(request: Request) {
     } catch {
       throw new EmailMagicLinkError("request_invalid");
     }
-    if (typeof payload !== "object" || payload === null) {
-      throw new EmailMagicLinkError("request_invalid");
-    }
+    if (typeof payload !== "object" || payload === null) throw new EmailMagicLinkError("request_invalid");
     const input = payload as Record<string, unknown>;
     return { email: input.email, returnTo: input.returnTo };
   }
@@ -131,57 +137,97 @@ async function parseRequestBody(request: Request) {
 
 function errorResponse(error: unknown) {
   const diagnostic =
-    error instanceof EmailMagicLinkError
+    error instanceof EmailMagicLinkError || error instanceof AccountPersistenceError
       ? { code: error.code, status: error.status }
       : { code: "email_magic_start_unexpected", status: 500 };
   console.warn("Email magic-link request rejected", {
     code: diagnostic.code,
     status: diagnostic.status,
   });
-  const safeStatus = diagnostic.status >= 500 ? diagnostic.status : diagnostic.status;
   return Response.json(
     {
       error: diagnostic.code,
       message:
-        safeStatus >= 500
+        diagnostic.status >= 500
           ? "The sign-in email could not be sent. Try again later."
           : "Enter a valid email address and try again.",
     },
     {
-      status: safeStatus,
+      status: diagnostic.status,
       headers: {
         ...COMMON_HEADERS,
         "X-Celestial-Email-Magic": "request-rejected",
         "X-Celestial-Email-Magic-Error": diagnostic.code,
+        "X-Celestial-Account-Persistence": "failed",
       },
     },
   );
 }
 
 export async function GET(request: Request) {
-  const runtime = await loadEmailMagicLinkRuntime();
-  if (runtime.appEnv !== "staging") return notFound();
-  if (!runtime.config) return notConfigured();
+  const [runtime, persistence] = await Promise.all([
+    loadEmailMagicLinkRuntime(),
+    loadAccountPersistenceRuntime(),
+  ]);
+  if (runtime.appEnv !== "staging" || persistence.appEnv !== "staging") return notFound();
+  if (!runtime.config) {
+    return notConfigured(
+      "email_magic_link_not_configured",
+      "Email magic-link sign-in is not configured for this environment.",
+    );
+  }
+  if (!persistence.db) {
+    return notConfigured(
+      "account_persistence_not_configured",
+      "Account persistence is not configured for this environment.",
+    );
+  }
   const requestUrl = new URL(request.url);
   if (requestUrl.protocol !== "https:") return notFound();
   return requestForm(sanitizeReturnTo(requestUrl.searchParams.get("returnTo"), "/"));
 }
 
 export async function POST(request: Request) {
-  const runtime = await loadEmailMagicLinkRuntime();
-  if (runtime.appEnv !== "staging") return notFound();
-  if (!runtime.config) return notConfigured();
+  const [runtime, persistence] = await Promise.all([
+    loadEmailMagicLinkRuntime(),
+    loadAccountPersistenceRuntime(),
+  ]);
+  if (runtime.appEnv !== "staging" || persistence.appEnv !== "staging") return notFound();
+  if (!runtime.config) {
+    return notConfigured(
+      "email_magic_link_not_configured",
+      "Email magic-link sign-in is not configured for this environment.",
+    );
+  }
+  if (!persistence.db) {
+    return notConfigured(
+      "account_persistence_not_configured",
+      "Account persistence is not configured for this environment.",
+    );
+  }
   const requestUrl = new URL(request.url);
   if (requestUrl.protocol !== "https:") return notFound();
 
+  const store = new D1AccountIdentityStore(persistence.db);
+  let registeredFingerprint: string | null = null;
   try {
     const input = await parseRequestBody(request);
+    const now = Date.now();
     const magicLink = await createEmailMagicLink(
       input.email,
       requestUrl.origin,
       input.returnTo,
       runtime.config.secret,
+      now,
     );
+    await registerDurableMagicLink(store, {
+      fingerprint: magicLink.fingerprint,
+      email: magicLink.email,
+      returnTo: input.returnTo,
+      createdAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + magicLink.expiresInSeconds * 1000).toISOString(),
+    });
+    registeredFingerprint = magicLink.fingerprint;
     await sendEmailMagicLink(
       runtime.config,
       magicLink.email,
@@ -190,6 +236,15 @@ export async function POST(request: Request) {
     );
     return sentResponse(magicLink.cookie);
   } catch (error) {
+    if (registeredFingerprint) {
+      try {
+        await revokeDurableMagicLink(store, registeredFingerprint);
+      } catch {
+        console.warn("Email magic-link registration cleanup failed", {
+          code: "email_magic_link_cleanup_failed",
+        });
+      }
+    }
     return errorResponse(error);
   }
 }

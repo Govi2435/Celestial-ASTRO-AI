@@ -59,7 +59,7 @@ jobs:
       - name: Prepare staging evidence directory
         run: |
           rm -rf artifacts/staging
-          mkdir -p artifacts/staging
+          mkdir -p artifacts/staging .wrangler
           : > artifacts/staging/smoke.log
 
       - name: Verify staging credentials
@@ -87,6 +87,19 @@ jobs:
       - name: Validate isolated staging artifact
         run: npm run staging:validate
 
+      - name: Prepare staging runtime configuration
+        id: staging_config
+        env:
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+        run: node scripts/prepare-staging-wrangler-config.mjs wrangler.staging.jsonc .wrangler/wrangler.staging.runtime.json
+
+      - name: Apply isolated D1 migrations
+        if: ${{ steps.staging_config.outputs.account-persistence == 'ready' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ./node_modules/.bin/wrangler d1 migrations apply DB --remote --config "${{ steps.staging_config.outputs.config-path }}"
+
       - name: Deploy isolated staging Worker
         id: deploy
         env:
@@ -95,13 +108,14 @@ jobs:
           WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-staging-output.ndjson
         run: |
           set -euo pipefail
-          ./node_modules/.bin/wrangler deploy --config wrangler.staging.jsonc
+          ./node_modules/.bin/wrangler deploy --config "${{ steps.staging_config.outputs.config-path }}"
           node scripts/read-wrangler-deploy-output.mjs "${WRANGLER_OUTPUT_FILE_PATH}" >> "${GITHUB_OUTPUT}"
 
       - name: Run staging smoke checks
         id: smoke
         env:
           STAGING_BASE_URL: ${{ steps.deploy.outputs.deployment-url }}
+          ACCOUNT_PERSISTENCE_EXPECTED: ${{ steps.staging_config.outputs.account-persistence }}
         run: |
           set -o pipefail
           npm run staging:smoke -- "${STAGING_BASE_URL}" 2>&1 | tee artifacts/staging/smoke.log

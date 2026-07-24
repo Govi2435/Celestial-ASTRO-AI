@@ -1,3 +1,9 @@
+import { D1AccountIdentityStore } from "../../../../account-identity-d1.ts";
+import {
+  AccountPersistenceError,
+  persistVerifiedIdentity,
+} from "../../../../account-identity-persistence.ts";
+import { loadAccountPersistenceRuntime } from "../../../../account-persistence-runtime.ts";
 import {
   GOOGLE_OAUTH_PROFILE,
   GoogleOAuthError,
@@ -25,7 +31,8 @@ type CallbackStage =
   | "state_validation"
   | "token_exchange"
   | "id_token_verification"
-  | "identity_validation";
+  | "identity_validation"
+  | "account_persistence";
 
 function notFound() {
   return Response.json({ error: "not_found" }, { status: 404, headers: COMMON_HEADERS });
@@ -37,13 +44,13 @@ function htmlResponse(
   message: string,
   outcome: string,
   diagnosticCode?: string,
+  persistenceOutcome?: string,
 ) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Google-OAuth", outcome);
-  if (diagnosticCode) {
-    headers.set("X-Celestial-Google-OAuth-Error", diagnosticCode);
-  }
+  if (diagnosticCode) headers.set("X-Celestial-Google-OAuth-Error", diagnosticCode);
+  if (persistenceOutcome) headers.set("X-Celestial-Account-Persistence", persistenceOutcome);
   headers.append("Set-Cookie", clearGoogleOAuthCookie());
   const diagnostic = diagnosticCode
     ? `<p class="diagnostic">Diagnostic code: <code>${diagnosticCode}</code></p>`
@@ -61,7 +68,7 @@ function htmlResponse(
     <h1>${title}</h1>
     <p>${message}</p>
     ${diagnostic}
-    <p class="note">This staging flow does not create a Celestial account or authenticated session yet.</p>
+    <p class="note">The account and Google identity are now durable. This staging flow does not create an authenticated session yet.</p>
   </main>
 </body>
 </html>`;
@@ -70,15 +77,16 @@ function htmlResponse(
 
 function safeDiagnostic(error: unknown, stage: CallbackStage) {
   if (error instanceof GoogleOAuthError) return getGoogleOAuthDiagnostic(error);
-  return {
-    code: `google_callback_${stage}_unexpected`,
-    status: 500,
-  };
+  if (error instanceof AccountPersistenceError) return { code: error.code, status: error.status };
+  return { code: `google_callback_${stage}_unexpected`, status: 500 };
 }
 
 export async function GET(request: Request) {
-  const runtime = await loadGoogleOAuthRuntime();
-  if (runtime.appEnv !== "staging") return notFound();
+  const [runtime, persistence] = await Promise.all([
+    loadGoogleOAuthRuntime(),
+    loadAccountPersistenceRuntime(),
+  ]);
+  if (runtime.appEnv !== "staging" || persistence.appEnv !== "staging") return notFound();
   if (!runtime.config) {
     return htmlResponse(
       503,
@@ -86,6 +94,16 @@ export async function GET(request: Request) {
       "Google sign-in is not configured for this environment.",
       "configuration-required",
       "google_oauth_not_configured",
+    );
+  }
+  if (!persistence.db) {
+    return htmlResponse(
+      503,
+      "Account persistence unavailable",
+      "The staging database binding is not configured.",
+      "configuration-required",
+      "account_persistence_not_configured",
+      "configuration-required",
     );
   }
 
@@ -110,10 +128,7 @@ export async function GET(request: Request) {
     if (!cookieValue) throw new GoogleOAuthError("oauth_transaction_missing");
 
     stage = "transaction_verification";
-    const transaction = await verifyGoogleOAuthTransaction(
-      cookieValue,
-      runtime.config.cookieSecret,
-    );
+    const transaction = await verifyGoogleOAuthTransaction(cookieValue, runtime.config.cookieSecret);
 
     stage = "state_validation";
     const returnedState = requestUrl.searchParams.get("state");
@@ -141,11 +156,26 @@ export async function GET(request: Request) {
       throw new GoogleOAuthError("google_identity_invalid");
     }
 
+    stage = "account_persistence";
+    const persisted = await persistVerifiedIdentity(
+      new D1AccountIdentityStore(persistence.db),
+      {
+        provider: "google",
+        subject: identity.subject,
+        email: identity.email,
+        emailVerified: true,
+        displayName: identity.displayName,
+        pictureUrl: identity.pictureUrl,
+      },
+    );
+
     return htmlResponse(
       200,
-      "Google identity verified",
-      `The ${GOOGLE_OAUTH_PROFILE.id} provider flow completed successfully.`,
-      "identity-verified",
+      "Google account identity persisted",
+      `The ${GOOGLE_OAUTH_PROFILE.id} flow completed and the verified identity was stored successfully.`,
+      "identity-persisted",
+      undefined,
+      persisted.outcome,
     );
   } catch (error) {
     const diagnostic = safeDiagnostic(error, stage);
@@ -154,13 +184,13 @@ export async function GET(request: Request) {
       status: diagnostic.status,
       stage,
     });
-    const safeStatus = diagnostic.status >= 500 ? 502 : 400;
     return htmlResponse(
-      safeStatus,
-      "Google sign-in could not be verified",
-      "The authorization response was rejected. Start a new sign-in attempt.",
+      diagnostic.status >= 500 ? 502 : diagnostic.status,
+      "Google sign-in could not be completed",
+      "The authorization response or account persistence step was rejected. Start a new sign-in attempt.",
       "verification-failed",
       diagnostic.code,
+      "failed",
     );
   }
 }

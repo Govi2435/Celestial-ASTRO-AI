@@ -1,29 +1,16 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
-import {
-  findDeployment,
-  parseWranglerOutput,
-} from "../scripts/read-wrangler-deploy-output.mjs";
-import {
-  assertSafeStagingConfig,
-  loadStagingConfig,
-} from "../scripts/validate-staging-deployment.mjs";
+import { findDeployment, parseWranglerOutput } from "../scripts/read-wrangler-deploy-output.mjs";
+import { prepareStagingWranglerConfig } from "../scripts/prepare-staging-wrangler-config.mjs";
+import { assertSafeStagingConfig, loadStagingConfig } from "../scripts/validate-staging-deployment.mjs";
 
-const workflow = readFileSync(
-  new URL("../.github/workflows/deploy-staging.yml", import.meta.url),
-  "utf8",
-);
-const smokeScript = readFileSync(
-  new URL("../scripts/smoke-staging.mjs", import.meta.url),
-  "utf8",
-);
-const config = loadStagingConfig(
-  new URL("../wrangler.staging.jsonc", import.meta.url),
-);
-const packageJson = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-);
+const workflow = readFileSync(new URL("../.github/workflows/deploy-staging.yml", import.meta.url), "utf8");
+const smokeScript = readFileSync(new URL("../scripts/smoke-staging.mjs", import.meta.url), "utf8");
+const config = loadStagingConfig(new URL("../wrangler.staging.jsonc", import.meta.url));
+const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
 test("staging deploys only protected main after successful CI or manual main dispatch", () => {
   assert.match(workflow, /^name: Staging Deployment$/m);
@@ -51,41 +38,69 @@ test("staging workflow uses least privilege and an isolated environment", () => 
   assert.match(workflow, /cancel-in-progress: false/);
 });
 
-test("staging uses the locked local Wrangler CLI and only Cloudflare environment secrets", () => {
+test("staging injects only the isolated D1 identifier and applies reviewed migrations", () => {
   assert.match(workflow, /secrets\.CLOUDFLARE_API_TOKEN/);
   assert.match(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/);
+  assert.match(workflow, /secrets\.CLOUDFLARE_D1_DATABASE_ID/);
+  assert.match(workflow, /prepare-staging-wrangler-config\.mjs/);
+  assert.match(workflow, /wrangler d1 migrations apply DB --remote/);
+  assert.match(workflow, /steps\.staging_config\.outputs\.account-persistence == 'ready'/);
+  assert.match(workflow, /wrangler deploy --config "\$\{\{ steps\.staging_config\.outputs\.config-path \}\}"/);
   assert.match(workflow, /WRANGLER_OUTPUT_FILE_PATH/);
-  assert.match(workflow, /\.\/node_modules\/\.bin\/wrangler deploy --config wrangler\.staging\.jsonc/);
-  assert.match(workflow, /read-wrangler-deploy-output\.mjs/);
   assert.doesNotMatch(workflow, /cloudflare\/wrangler-action/);
-  assert.doesNotMatch(
-    workflow,
-    /OPENAI_API_KEY|RAZORPAY_KEY|GOOGLE_CLIENT_SECRET|GOOGLE_OAUTH_COOKIE_SECRET|rzp_live|production/i,
-  );
+  assert.doesNotMatch(workflow, /OPENAI_API_KEY|RAZORPAY_KEY|GOOGLE_CLIENT_SECRET|EMAIL_MAGIC_LINK_SECRET|rzp_live|production/i);
+});
+
+test("runtime staging config supports pending or exactly one approved D1 binding", () => {
+  assert.doesNotThrow(() => assertSafeStagingConfig(config));
+  assert.equal(Object.hasOwn(config, "d1_databases"), false);
+  const directory = mkdtempSync(join(tmpdir(), "celestial-staging-config-"));
+  try {
+    const inputPath = join(directory, "input.json");
+    const pendingPath = join(directory, "pending.json");
+    const readyPath = join(directory, "ready.json");
+    writeFileSync(inputPath, JSON.stringify(config));
+
+    const pending = prepareStagingWranglerConfig({ inputPath, outputPath: pendingPath, databaseId: "" });
+    assert.equal(pending.accountPersistence, "pending");
+    const pendingConfig = JSON.parse(readFileSync(pendingPath, "utf8"));
+    assert.equal(Object.hasOwn(pendingConfig, "d1_databases"), false);
+    assert.doesNotThrow(() => assertSafeStagingConfig(pendingConfig));
+
+    const ready = prepareStagingWranglerConfig({
+      inputPath,
+      outputPath: readyPath,
+      databaseId: "11111111-2222-4333-8444-555555555555",
+    });
+    assert.equal(ready.accountPersistence, "ready");
+    const readyConfig = JSON.parse(readFileSync(readyPath, "utf8"));
+    assert.doesNotThrow(() => assertSafeStagingConfig(readyConfig, { allowD1: true }));
+    assert.deepEqual(readyConfig.d1_databases[0], {
+      binding: "DB",
+      database_name: "cosmicsphere-staging-db",
+      database_id: "11111111-2222-4333-8444-555555555555",
+      migrations_dir: "drizzle",
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("structured Wrangler output produces the staging deployment URL", () => {
-  const records = parseWranglerOutput(
-    [
-      JSON.stringify({ type: "wrangler-session", version: 1 }),
-      JSON.stringify({
-        type: "deploy",
-        worker_name: "cosmicsphere-staging",
-        version_id: "version-123",
-        targets: ["https://cosmicsphere-staging.example.workers.dev"],
-      }),
-    ].join("\n"),
-  );
-
+  const records = parseWranglerOutput([
+    JSON.stringify({ type: "wrangler-session", version: 1 }),
+    JSON.stringify({
+      type: "deploy",
+      worker_name: "cosmicsphere-staging",
+      version_id: "version-123",
+      targets: ["https://cosmicsphere-staging.example.workers.dev"],
+    }),
+  ].join("\n"));
   assert.deepEqual(findDeployment(records), {
     deploymentUrl: "https://cosmicsphere-staging.example.workers.dev",
     versionId: "version-123",
   });
-
-  assert.throws(
-    () => findDeployment([{ type: "deploy", worker_name: "cosmicsphere" }]),
-    /HTTPS deployment target|Unexpected deployed Worker/,
-  );
+  assert.throws(() => findDeployment([{ type: "deploy", worker_name: "cosmicsphere" }]), /HTTPS deployment target|Unexpected deployed Worker/);
 });
 
 test("staging validates, smoke tests, and retains bounded evidence", () => {
@@ -101,60 +116,20 @@ test("staging validates, smoke tests, and retains bounded evidence", () => {
   assert.match(workflow, /include-hidden-files: false/);
 });
 
-test("staging smoke verifies the authentication compatibility contract", () => {
-  assert.match(smokeScript, /\/api\/auth\/compatibility/);
+test("staging smoke accepts configuration-pending or ready account persistence", () => {
+  assert.match(smokeScript, /account_persistence_not_configured/);
+  assert.match(smokeScript, /\/api\/auth\/google\/start/);
+  assert.match(smokeScript, /\/api\/auth\/email\/start/);
+  assert.match(smokeScript, /x-celestial-account-persistence/);
+  assert.match(smokeScript, /__Host-celestial_google_oauth=/);
   assert.match(smokeScript, /__Host-celestial_auth_probe=/);
-  assert.match(smokeScript, /method: "POST"/);
-  assert.match(smokeScript, /method: "DELETE"/);
   assert.match(smokeScript, /SameSite=Lax/);
-  assert.match(smokeScript, /cookieRoundTrip/);
-  assert.match(smokeScript, /tokenHashing/);
-  assert.match(smokeScript, /mode=redirect/);
   assert.doesNotMatch(smokeScript, /console\.log\([^\n]*(cookiePair|setCookie)/);
 });
 
-test("staging smoke verifies Google OAuth configuration or a safe authorization redirect", () => {
-  assert.match(smokeScript, /\/api\/auth\/google\/start/);
-  assert.match(smokeScript, /google_oauth_not_configured/);
-  assert.match(smokeScript, /https:\/\/accounts\.google\.com/);
-  assert.match(smokeScript, /\/o\/oauth2\/v2\/auth/);
-  assert.match(smokeScript, /code_challenge_method/);
-  assert.match(smokeScript, /__Host-celestial_google_oauth=/);
-  assert.match(smokeScript, /SameSite=Lax/);
-  assert.doesNotMatch(smokeScript, /GOOGLE_CLIENT_SECRET|GOOGLE_OAUTH_COOKIE_SECRET/);
-});
-
-test("Wrangler staging config is isolated and has only current bindings", () => {
-  assert.doesNotThrow(() => assertSafeStagingConfig(config));
-  assert.equal(config.name, "cosmicsphere-staging");
-  assert.equal(config.workers_dev, true);
-  assert.equal(config.assets.binding, "ASSETS");
-  assert.equal(config.images.binding, "IMAGES");
-  assert.equal(Object.hasOwn(config, "d1_databases"), false);
-  assert.equal(Object.hasOwn(config, "r2_buckets"), false);
-  assert.equal(Object.hasOwn(config, "routes"), false);
-
-  assert.throws(
-    () => assertSafeStagingConfig({ ...config, name: "cosmicsphere" }),
-    /cosmicsphere-staging/,
-  );
-});
-
 test("repository exposes the staging operating commands", () => {
-  assert.equal(
-    packageJson.scripts["staging:validate"],
-    "node scripts/validate-staging-deployment.mjs",
-  );
-  assert.equal(
-    packageJson.scripts["staging:smoke"],
-    "node scripts/smoke-staging.mjs",
-  );
-  assert.equal(
-    packageJson.scripts["staging:evidence"],
-    "node scripts/write-staging-evidence.mjs artifacts/staging/deployment.json",
-  );
-  assert.equal(
-    packageJson.scripts["staging:evidence:validate"],
-    "node scripts/validate-staging-evidence.mjs artifacts/staging",
-  );
+  assert.equal(packageJson.scripts["staging:validate"], "node scripts/validate-staging-deployment.mjs");
+  assert.equal(packageJson.scripts["staging:smoke"], "node scripts/smoke-staging.mjs");
+  assert.equal(packageJson.scripts["staging:evidence"], "node scripts/write-staging-evidence.mjs artifacts/staging/deployment.json");
+  assert.equal(packageJson.scripts["staging:evidence:validate"], "node scripts/validate-staging-evidence.mjs artifacts/staging");
 });

@@ -1,9 +1,16 @@
+import { D1AccountIdentityStore } from "../../../../account-identity-d1.ts";
+import {
+  AccountPersistenceError,
+  assertDurableMagicLinkConsumable,
+  consumeDurableMagicLink,
+  persistVerifiedIdentity,
+} from "../../../../account-identity-persistence.ts";
+import { loadAccountPersistenceRuntime } from "../../../../account-persistence-runtime.ts";
+import { verifyDurableEmailMagicLink } from "../../../../durable-email-magic-link.ts";
 import {
   EMAIL_MAGIC_LINK_PROFILE,
   EmailMagicLinkError,
   clearEmailMagicCookie,
-  parseEmailMagicCookie,
-  verifyEmailMagicLink,
 } from "../../../../email-magic-link.ts";
 import { loadEmailMagicLinkRuntime } from "../../../../email-magic-link-runtime.ts";
 
@@ -27,11 +34,13 @@ function htmlResponse(
   message: string,
   outcome: string,
   diagnosticCode?: string,
+  persistenceOutcome?: string,
 ) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Email-Magic", outcome);
   if (diagnosticCode) headers.set("X-Celestial-Email-Magic-Error", diagnosticCode);
+  if (persistenceOutcome) headers.set("X-Celestial-Account-Persistence", persistenceOutcome);
   headers.append("Set-Cookie", clearEmailMagicCookie());
   const diagnostic = diagnosticCode
     ? `<p class="diagnostic">Diagnostic code: <code>${diagnosticCode}</code></p>`
@@ -49,51 +58,71 @@ function htmlResponse(
     <h1>${title}</h1>
     <p>${message}</p>
     ${diagnostic}
-    <p class="note">This staging flow verifies email only. It does not create a Celestial account or authenticated session yet.</p>
+    <p class="note">The account and email identity are now durable. This staging flow does not create an authenticated session yet.</p>
   </main>
 </body>
 </html>`;
   return new Response(html, { status, headers });
 }
 
-function notConfigured() {
+function notConfigured(code: string, message: string) {
   return htmlResponse(
     503,
     "Email sign-in unavailable",
-    "Email magic-link sign-in is not configured for this environment.",
+    message,
     "configuration-required",
-    "email_magic_link_not_configured",
+    code,
+    code === "account_persistence_not_configured" ? "configuration-required" : undefined,
   );
 }
 
 export async function GET(request: Request) {
-  const runtime = await loadEmailMagicLinkRuntime();
-  if (runtime.appEnv !== "staging") return notFound();
-  if (!runtime.config) return notConfigured();
+  const [runtime, persistence] = await Promise.all([
+    loadEmailMagicLinkRuntime(),
+    loadAccountPersistenceRuntime(),
+  ]);
+  if (runtime.appEnv !== "staging" || persistence.appEnv !== "staging") return notFound();
+  if (!runtime.config) {
+    return notConfigured(
+      "email_magic_link_not_configured",
+      "Email magic-link sign-in is not configured for this environment.",
+    );
+  }
+  if (!persistence.db) {
+    return notConfigured(
+      "account_persistence_not_configured",
+      "The staging database binding is not configured.",
+    );
+  }
   const requestUrl = new URL(request.url);
   if (requestUrl.protocol !== "https:") return notFound();
 
   try {
-    const token = requestUrl.searchParams.get("token");
-    const cookieValue = parseEmailMagicCookie(request.headers.get("cookie"));
-    const identity = await verifyEmailMagicLink(
-      token,
-      cookieValue,
+    const verification = await verifyDurableEmailMagicLink(
+      requestUrl.searchParams.get("token"),
       runtime.config.secret,
     );
-    if (identity.provider !== "email_magic_link" || !identity.emailVerified) {
-      throw new EmailMagicLinkError("email_magic_identity_invalid");
-    }
+    const store = new D1AccountIdentityStore(persistence.db);
+    await assertDurableMagicLinkConsumable(store, verification);
+    const persisted = await persistVerifiedIdentity(store, {
+      provider: "email_magic_link",
+      subject: verification.email,
+      email: verification.email,
+      emailVerified: true,
+    });
+    await consumeDurableMagicLink(store, verification.fingerprint);
 
     return htmlResponse(
       200,
-      "Email identity verified",
-      `The ${EMAIL_MAGIC_LINK_PROFILE.id} provider flow completed successfully.`,
-      "identity-verified",
+      "Email account identity persisted",
+      `The ${EMAIL_MAGIC_LINK_PROFILE.id} flow completed and the verified identity was stored successfully.`,
+      "identity-persisted",
+      undefined,
+      persisted.outcome,
     );
   } catch (error) {
     const diagnostic =
-      error instanceof EmailMagicLinkError
+      error instanceof EmailMagicLinkError || error instanceof AccountPersistenceError
         ? { code: error.code, status: error.status }
         : { code: "email_magic_verify_unexpected", status: 500 };
     console.warn("Email magic-link verification rejected", {
@@ -101,11 +130,12 @@ export async function GET(request: Request) {
       status: diagnostic.status,
     });
     return htmlResponse(
-      diagnostic.status >= 500 ? 502 : 400,
-      "Email sign-in could not be verified",
-      "The sign-in link was rejected. Request a new link in this browser.",
+      diagnostic.status >= 500 ? 502 : diagnostic.status,
+      "Email sign-in could not be completed",
+      "The sign-in link or account persistence step was rejected. Request a new link.",
       "verification-failed",
       diagnostic.code,
+      "failed",
     );
   }
 }

@@ -15,6 +15,47 @@ export const accounts = sqliteTable(
   (table) => [uniqueIndex("accounts_email_unique").on(table.email)],
 );
 
+export const accountIdentities = sqliteTable(
+  "account_identities",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    provider: text("provider", { enum: ["google", "email_magic_link"] }).notNull(),
+    providerSubject: text("provider_subject").notNull(),
+    email: text("email").notNull(),
+    displayName: text("display_name").notNull().default(""),
+    pictureUrl: text("picture_url"),
+    emailVerifiedAt: text("email_verified_at").notNull(),
+    lastVerifiedAt: text("last_verified_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("account_identities_provider_subject_unique").on(table.provider, table.providerSubject),
+    uniqueIndex("account_identities_account_provider_unique").on(table.accountId, table.provider),
+    index("account_identities_account_idx").on(table.accountId),
+    index("account_identities_email_idx").on(table.email),
+  ],
+);
+
+export const emailMagicLinkTokens = sqliteTable(
+  "email_magic_link_tokens",
+  {
+    fingerprint: text("fingerprint").primaryKey(),
+    email: text("email").notNull(),
+    returnTo: text("return_to").notNull().default("/"),
+    expiresAt: text("expires_at").notNull(),
+    consumedAt: text("consumed_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("email_magic_link_tokens_expiry_idx").on(table.expiresAt),
+    index("email_magic_link_tokens_email_idx").on(table.email),
+  ],
+);
+
 export const familyProfiles = sqliteTable(
   "family_profiles",
   {
