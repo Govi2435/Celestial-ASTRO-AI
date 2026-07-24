@@ -1,4 +1,18 @@
+import { D1AuthRateLimitStore } from "../../../auth-rate-limit-d1.ts";
+import {
+  AUTH_RATE_LIMITS,
+  AuthRateLimitError,
+  applyRateLimitErrorHeaders,
+  applyRateLimitHeaders,
+  enforceAuthRateLimit,
+} from "../../../auth-rate-limit.ts";
 import { loadAccountPersistenceRuntime } from "../../../account-persistence-runtime.ts";
+import {
+  RequestSecurityError,
+  assertSessionCsrf,
+  assertTrustedMutation,
+  issueSessionCsrf,
+} from "../../../request-security.ts";
 import { D1ServerSessionStore } from "../../../server-session-d1.ts";
 import {
   SessionManagementError,
@@ -29,15 +43,6 @@ function jsonResponse(body: unknown, status: number, headers?: Headers) {
   return Response.json(body, { status, headers: responseHeaders });
 }
 
-function mutationAllowed(request: Request) {
-  const requestUrl = new URL(request.url);
-  if (requestUrl.protocol !== "https:") return false;
-  const origin = request.headers.get("origin");
-  if (origin && origin !== requestUrl.origin) return false;
-  const fetchSite = request.headers.get("sec-fetch-site");
-  return !fetchSite || ["same-origin", "none"].includes(fetchSite);
-}
-
 function errorResponse(error: unknown) {
   if (error instanceof ServerSessionError) {
     const headers = new Headers(COMMON_HEADERS);
@@ -49,6 +54,14 @@ function errorResponse(error: unknown) {
       error.status >= 500 ? 502 : error.status,
       headers,
     );
+  }
+  if (error instanceof RequestSecurityError) {
+    return jsonResponse({ error: error.code }, error.status);
+  }
+  if (error instanceof AuthRateLimitError) {
+    const headers = new Headers(COMMON_HEADERS);
+    applyRateLimitErrorHeaders(headers, error);
+    return jsonResponse({ error: error.code }, error.status, headers);
   }
   if (error instanceof SessionManagementError) {
     return jsonResponse({ error: error.code }, error.status);
@@ -75,16 +88,22 @@ async function loadAuthenticated(request: Request) {
     store,
     request.headers.get("cookie"),
   );
-  return { store, authenticated } as const;
+  return {
+    store,
+    rateLimitStore: new D1AuthRateLimitStore(runtime.db),
+    authenticated,
+  } as const;
 }
 
 function authenticatedHeaders(
   setCookie: string | null,
   outcome: "listed" | "revoked" | "others-revoked",
+  rateLimit?: { limit: number; remaining: number; resetSeconds: number },
 ) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("X-Celestial-Session-Management", outcome);
   if (setCookie) headers.append("Set-Cookie", setCookie);
+  if (rateLimit) applyRateLimitHeaders(headers, rateLimit);
   return headers;
 }
 
@@ -92,11 +111,14 @@ export async function GET(request: Request) {
   try {
     const loaded = await loadAuthenticated(request);
     if ("response" in loaded) return loaded.response;
-    const sessions = await listManagedSessions(
-      loaded.store,
-      loaded.authenticated.account.id,
-      loaded.authenticated.session.id,
-    );
+    const [sessions, csrfToken] = await Promise.all([
+      listManagedSessions(
+        loaded.store,
+        loaded.authenticated.account.id,
+        loaded.authenticated.session.id,
+      ),
+      issueSessionCsrf(loaded.store, loaded.authenticated.session.id),
+    ]);
     return jsonResponse(
       {
         authenticated: true,
@@ -106,6 +128,7 @@ export async function GET(request: Request) {
           displayName: loaded.authenticated.account.displayName,
         },
         sessions,
+        csrfToken,
       },
       200,
       authenticatedHeaders(loaded.authenticated.setCookie, "listed"),
@@ -116,16 +139,20 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!mutationAllowed(request)) {
-    return jsonResponse({ error: "session_management_origin_rejected" }, 403);
-  }
-  if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) {
-    return jsonResponse({ error: "session_management_content_type_invalid" }, 415);
-  }
-
   try {
+    assertTrustedMutation(request);
+    if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("application/json")) {
+      return jsonResponse({ error: "session_management_content_type_invalid" }, 415);
+    }
+
     const loaded = await loadAuthenticated(request);
     if ("response" in loaded) return loaded.response;
+    await assertSessionCsrf(request, loaded.store, loaded.authenticated.session.id);
+    const rateLimit = await enforceAuthRateLimit(
+      loaded.rateLimitStore,
+      AUTH_RATE_LIMITS.sessionMutation,
+      loaded.authenticated.account.id,
+    );
     const body = (await request.json()) as {
       action?: unknown;
       sessionId?: unknown;
@@ -137,15 +164,18 @@ export async function POST(request: Request) {
         currentSessionId: loaded.authenticated.session.id,
         targetSessionId: body.sessionId,
       });
-      const sessions = await listManagedSessions(
-        loaded.store,
-        loaded.authenticated.account.id,
-        loaded.authenticated.session.id,
-      );
+      const [sessions, csrfToken] = await Promise.all([
+        listManagedSessions(
+          loaded.store,
+          loaded.authenticated.account.id,
+          loaded.authenticated.session.id,
+        ),
+        issueSessionCsrf(loaded.store, loaded.authenticated.session.id),
+      ]);
       return jsonResponse(
-        { ...result, sessions },
+        { ...result, sessions, csrfToken },
         200,
-        authenticatedHeaders(loaded.authenticated.setCookie, "revoked"),
+        authenticatedHeaders(loaded.authenticated.setCookie, "revoked", rateLimit),
       );
     }
 
@@ -154,15 +184,18 @@ export async function POST(request: Request) {
         accountId: loaded.authenticated.account.id,
         currentSessionId: loaded.authenticated.session.id,
       });
-      const sessions = await listManagedSessions(
-        loaded.store,
-        loaded.authenticated.account.id,
-        loaded.authenticated.session.id,
-      );
+      const [sessions, csrfToken] = await Promise.all([
+        listManagedSessions(
+          loaded.store,
+          loaded.authenticated.account.id,
+          loaded.authenticated.session.id,
+        ),
+        issueSessionCsrf(loaded.store, loaded.authenticated.session.id),
+      ]);
       return jsonResponse(
-        { ...result, sessions },
+        { ...result, sessions, csrfToken },
         200,
-        authenticatedHeaders(loaded.authenticated.setCookie, "others-revoked"),
+        authenticatedHeaders(loaded.authenticated.setCookie, "others-revoked", rateLimit),
       );
     }
 
