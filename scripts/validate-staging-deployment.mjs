@@ -5,12 +5,13 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const configPath = resolve(projectRoot, "wrangler.staging.jsonc");
+const D1_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 export function loadStagingConfig(path = configPath) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-export function assertSafeStagingConfig(config) {
+export function assertSafeStagingConfig(config, { allowD1 = false } = {}) {
   assert.equal(config.name, "cosmicsphere-staging");
   assert.equal(config.main, "./dist/server/index.js");
   assert.equal(config.workers_dev, true);
@@ -27,10 +28,28 @@ export function assertSafeStagingConfig(config) {
   assert.equal(config.vars?.DEPLOYMENT_CHANNEL, "github-actions");
   assert.equal(config.observability?.enabled, true);
 
+  if (Object.hasOwn(config, "d1_databases")) {
+    assert.equal(allowD1, true, "Base staging config must not hard-code a D1 database.");
+    assert.equal(config.d1_databases.length, 1);
+    const [binding] = config.d1_databases;
+    assert.deepEqual(
+      {
+        binding: binding.binding,
+        database_name: binding.database_name,
+        migrations_dir: binding.migrations_dir,
+      },
+      {
+        binding: "DB",
+        database_name: "cosmicsphere-staging-db",
+        migrations_dir: "drizzle",
+      },
+    );
+    assert.match(binding.database_id, D1_ID_PATTERN);
+  }
+
   for (const forbiddenKey of [
     "routes",
     "route",
-    "d1_databases",
     "r2_buckets",
     "kv_namespaces",
     "services",
@@ -49,40 +68,20 @@ export function assertSafeStagingConfig(config) {
 }
 
 export function assertBuiltStagingArtifact(root = projectRoot) {
-  const required = [
-    "dist/server/index.js",
-    "dist/.openai/hosting.json",
-    "dist/client",
-  ];
-
+  const required = ["dist/server/index.js", "dist/.openai/hosting.json", "dist/client"];
   for (const relativePath of required) {
     const absolutePath = resolve(root, relativePath);
     assert.equal(existsSync(absolutePath), true, `Missing staging artifact: ${relativePath}`);
   }
-
-  assert.equal(
-    statSync(resolve(root, "dist/server/index.js")).isFile(),
-    true,
-    "Staging Worker entry must be a regular file.",
-  );
-  assert.equal(
-    statSync(resolve(root, "dist/client")).isDirectory(),
-    true,
-    "Staging assets path must be a directory.",
-  );
-
-  const hosting = JSON.parse(
-    readFileSync(resolve(root, "dist/.openai/hosting.json"), "utf8"),
-  );
-  assert.equal(hosting.d1, null, "Staging must not silently activate D1.");
+  assert.equal(statSync(resolve(root, "dist/server/index.js")).isFile(), true);
+  assert.equal(statSync(resolve(root, "dist/client")).isDirectory(), true);
+  const hosting = JSON.parse(readFileSync(resolve(root, "dist/.openai/hosting.json"), "utf8"));
+  assert.equal(hosting.d1, null, "D1 is injected only through the reviewed staging Wrangler config.");
   assert.equal(hosting.r2, null, "Staging must not silently activate R2.");
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const config = loadStagingConfig();
-  assertSafeStagingConfig(config);
+  assertSafeStagingConfig(loadStagingConfig());
   assertBuiltStagingArtifact();
-  console.log(
-    "Validated staging deployment: isolated Worker name, approved bindings, no D1/R2, and complete vinext artifact.",
-  );
+  console.log("Validated staging deployment: isolated Worker, optional approved D1 injection, no R2, and complete vinext artifact.");
 }
