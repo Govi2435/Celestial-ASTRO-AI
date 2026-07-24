@@ -1,3 +1,4 @@
+import { loadAccountPersistenceRuntime } from "../../../account-persistence-runtime.ts";
 import { D1AuthRateLimitStore } from "../../../auth-rate-limit-d1.ts";
 import {
   AUTH_RATE_LIMITS,
@@ -5,7 +6,7 @@ import {
   applyRateLimitErrorHeaders,
   enforceAuthRateLimit,
 } from "../../../auth-rate-limit.ts";
-import { loadAccountPersistenceRuntime } from "../../../account-persistence-runtime.ts";
+import { revokeAuthenticatedServerSession } from "../../../authenticated-session-revocation.ts";
 import {
   RequestSecurityError,
   assertSessionCsrf,
@@ -15,7 +16,6 @@ import {
   ServerSessionError,
   authenticateServerSession,
   clearServerSessionCookie,
-  revokeServerSession,
 } from "../../../server-session.ts";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
       AUTH_RATE_LIMITS.logout,
       `${authenticated.account.id}:${authenticated.session.id}`,
     );
-    await revokeServerSession(store, request.headers.get("cookie"), "logout");
+    await revokeAuthenticatedServerSession(store, authenticated.session, "logout");
     const headers = new Headers(COMMON_HEADERS);
     headers.set("RateLimit-Limit", String(rateLimit.limit));
     headers.set("RateLimit-Remaining", String(rateLimit.remaining));
