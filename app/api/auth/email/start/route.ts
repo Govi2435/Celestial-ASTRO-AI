@@ -5,6 +5,14 @@ import {
   revokeDurableMagicLink,
 } from "../../../../account-identity-persistence.ts";
 import { loadAccountPersistenceRuntime } from "../../../../account-persistence-runtime.ts";
+import { D1AuthRateLimitStore } from "../../../../auth-rate-limit-d1.ts";
+import {
+  AUTH_RATE_LIMITS,
+  AuthRateLimitError,
+  applyRateLimitErrorHeaders,
+  applyRateLimitHeaders,
+  enforceAuthRateLimit,
+} from "../../../../auth-rate-limit.ts";
 import { sanitizeReturnTo } from "../../../../auth-compatibility.ts";
 import { sendEmailMagicLink } from "../../../../email-magic-link-delivery.ts";
 import {
@@ -12,6 +20,15 @@ import {
   createEmailMagicLink,
 } from "../../../../email-magic-link.ts";
 import { loadEmailMagicLinkRuntime } from "../../../../email-magic-link-runtime.ts";
+import {
+  REQUEST_SECURITY_PROFILE,
+  RequestSecurityError,
+  assertAnonymousCsrf,
+  clearAnonymousCsrfCookie,
+  clientAddressKey,
+  createAnonymousCsrfToken,
+  serializeAnonymousCsrfCookie,
+} from "../../../../request-security.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -52,11 +69,13 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-function requestForm(returnTo: string) {
+function requestForm(returnTo: string, csrfToken: string) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Email-Magic", "request-ready");
   headers.set("X-Celestial-Account-Persistence", "ready");
+  headers.set("X-Celestial-CSRF", "issued");
+  headers.append("Set-Cookie", serializeAnonymousCsrfCookie(csrfToken));
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -72,21 +91,27 @@ function requestForm(returnTo: string) {
       <label for="email">Email address</label>
       <input id="email" name="email" type="email" inputmode="email" autocomplete="email" maxlength="320" required>
       <input name="returnTo" type="hidden" value="${escapeHtml(returnTo)}">
+      <input name="${REQUEST_SECURITY_PROFILE.anonymousCsrfFieldName}" type="hidden" value="${csrfToken}">
       <button type="submit">Send secure sign-in link</button>
     </form>
-    <p class="note">The link expires in 10 minutes and may be opened in any browser. A verified account identity will be stored; session creation is added in ASTRO-125.</p>
+    <p class="note">The link expires in 10 minutes and may be opened in any browser. Requests are protected against cross-site submission and automated abuse.</p>
   </main>
 </body>
 </html>`;
   return new Response(html, { status: 200, headers });
 }
 
-function sentResponse(cookie: string) {
+function sentResponse(
+  cookie: string,
+  rateLimit: { limit: number; remaining: number; resetSeconds: number },
+) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Email-Magic", "link-sent");
   headers.set("X-Celestial-Account-Persistence", "token-registered");
   headers.append("Set-Cookie", cookie);
+  headers.append("Set-Cookie", clearAnonymousCsrfCookie());
+  applyRateLimitHeaders(headers, rateLimit);
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -124,20 +149,36 @@ async function parseRequestBody(request: Request) {
     }
     if (typeof payload !== "object" || payload === null) throw new EmailMagicLinkError("request_invalid");
     const input = payload as Record<string, unknown>;
-    return { email: input.email, returnTo: input.returnTo };
+    return { email: input.email, returnTo: input.returnTo, csrfToken: input.csrfToken };
   }
 
   if (contentType === "application/x-www-form-urlencoded") {
     const form = new URLSearchParams(raw);
-    return { email: form.get("email"), returnTo: form.get("returnTo") };
+    return {
+      email: form.get("email"),
+      returnTo: form.get("returnTo"),
+      csrfToken: form.get(REQUEST_SECURITY_PROFILE.anonymousCsrfFieldName),
+    };
   }
 
   throw new EmailMagicLinkError("content_type_unsupported", 415);
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof AuthRateLimitError) {
+    const headers = new Headers(COMMON_HEADERS);
+    headers.set("X-Celestial-Email-Magic", "rate-limited");
+    headers.set("X-Celestial-Account-Persistence", "protected");
+    applyRateLimitErrorHeaders(headers, error);
+    return Response.json(
+      { error: error.code, message: "Too many sign-in requests. Try again later." },
+      { status: error.status, headers },
+    );
+  }
   const diagnostic =
-    error instanceof EmailMagicLinkError || error instanceof AccountPersistenceError
+    error instanceof EmailMagicLinkError ||
+    error instanceof AccountPersistenceError ||
+    error instanceof RequestSecurityError
       ? { code: error.code, status: error.status }
       : { code: "email_magic_start_unexpected", status: 500 };
   console.warn("Email magic-link request rejected", {
@@ -150,7 +191,9 @@ function errorResponse(error: unknown) {
       message:
         diagnostic.status >= 500
           ? "The sign-in email could not be sent. Try again later."
-          : "Enter a valid email address and try again.",
+          : diagnostic.status === 403
+            ? "The sign-in form expired or was submitted from another site. Reload and try again."
+            : "Enter a valid email address and try again.",
     },
     {
       status: diagnostic.status,
@@ -184,7 +227,10 @@ export async function GET(request: Request) {
   }
   const requestUrl = new URL(request.url);
   if (requestUrl.protocol !== "https:") return notFound();
-  return requestForm(sanitizeReturnTo(requestUrl.searchParams.get("returnTo"), "/"));
+  return requestForm(
+    sanitizeReturnTo(requestUrl.searchParams.get("returnTo"), "/"),
+    createAnonymousCsrfToken(),
+  );
 }
 
 export async function POST(request: Request) {
@@ -209,9 +255,16 @@ export async function POST(request: Request) {
   if (requestUrl.protocol !== "https:") return notFound();
 
   const store = new D1AccountIdentityStore(persistence.db);
+  const rateLimitStore = new D1AuthRateLimitStore(persistence.db);
   let registeredFingerprint: string | null = null;
   try {
     const input = await parseRequestBody(request);
+    assertAnonymousCsrf(request, input.csrfToken);
+    await enforceAuthRateLimit(
+      rateLimitStore,
+      AUTH_RATE_LIMITS.emailStartClient,
+      clientAddressKey(request),
+    );
     const now = Date.now();
     const magicLink = await createEmailMagicLink(
       input.email,
@@ -219,6 +272,11 @@ export async function POST(request: Request) {
       input.returnTo,
       runtime.config.secret,
       now,
+    );
+    const addressLimit = await enforceAuthRateLimit(
+      rateLimitStore,
+      AUTH_RATE_LIMITS.emailStartAddress,
+      magicLink.email,
     );
     await registerDurableMagicLink(store, {
       fingerprint: magicLink.fingerprint,
@@ -234,7 +292,7 @@ export async function POST(request: Request) {
       magicLink.verificationUrl,
       magicLink.fingerprint,
     );
-    return sentResponse(magicLink.cookie);
+    return sentResponse(magicLink.cookie, addressLimit);
   } catch (error) {
     if (registeredFingerprint) {
       try {

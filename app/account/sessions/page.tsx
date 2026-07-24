@@ -26,13 +26,14 @@ type SessionPayload = {
   authenticated?: boolean;
   account?: Account;
   sessions?: ManagedSession[];
+  csrfToken?: string;
   error?: string;
 };
 
 type ViewState =
   | { status: "loading" }
   | { status: "anonymous"; reason?: string }
-  | { status: "ready"; account: Account; sessions: ManagedSession[] }
+  | { status: "ready"; account: Account; sessions: ManagedSession[]; csrfToken: string }
   | { status: "error"; message: string };
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en", {
@@ -61,7 +62,13 @@ async function readSessionView(): Promise<ViewState> {
       headers: { Accept: "application/json" },
     });
     const payload = (await response.json()) as SessionPayload;
-    if (!response.ok || !payload.authenticated || !payload.account || !payload.sessions) {
+    if (
+      !response.ok ||
+      !payload.authenticated ||
+      !payload.account ||
+      !payload.sessions ||
+      !payload.csrfToken
+    ) {
       if (response.status === 401 || payload.error?.startsWith("session_")) {
         return { status: "anonymous", reason: payload.error };
       }
@@ -71,6 +78,7 @@ async function readSessionView(): Promise<ViewState> {
       status: "ready",
       account: payload.account,
       sessions: payload.sessions,
+      csrfToken: payload.csrfToken,
     };
   } catch (error) {
     return {
@@ -113,6 +121,7 @@ export default function SessionManagementPage() {
     body: { action: "revoke-session"; sessionId: string } | { action: "revoke-others" },
     pendingKey: string,
   ) {
+    if (view.status !== "ready") return;
     setPending(pendingKey);
     setNotice("");
     try {
@@ -122,6 +131,7 @@ export default function SessionManagementPage() {
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
+          "X-Celestial-CSRF": view.csrfToken,
         },
         body: JSON.stringify(body),
       });
@@ -129,12 +139,16 @@ export default function SessionManagementPage() {
         revoked?: boolean;
         count?: number;
       };
-      if (!response.ok || !payload.sessions) {
+      if (!response.ok || !payload.sessions || !payload.csrfToken) {
         throw new Error(payload.error || "The session change could not be completed.");
       }
       setView((current) =>
         current.status === "ready"
-          ? { ...current, sessions: payload.sessions ?? current.sessions }
+          ? {
+              ...current,
+              sessions: payload.sessions ?? current.sessions,
+              csrfToken: payload.csrfToken ?? current.csrfToken,
+            }
           : current,
       );
       setNotice(
@@ -174,12 +188,14 @@ export default function SessionManagementPage() {
   }
 
   async function logoutCurrent() {
+    if (view.status !== "ready") return;
     setPending("current");
     setNotice("");
     try {
       const response = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
+        headers: { "X-Celestial-CSRF": view.csrfToken },
       });
       if (response.status !== 204) {
         throw new Error("This session could not be signed out.");

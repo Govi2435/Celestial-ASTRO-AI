@@ -20,13 +20,18 @@
     {
       "file": "0004_p9_secure_server_sessions.sql",
       "normalizedSha256": "9b8c5058a6f17d432453c02743b4056e599f198381057751fb2c5d30c3d69e90"
+    },
+    {
+      "file": "0005_p9_csrf_rate_limits.sql",
+      "normalizedSha256": "719a431ade31e7d0167db124f71f0393887c010f69c4f4005cf9474ce0791b38"
     }
   ],
-  "schemaSha256": "b9441200877b2a2171197f30e16013d63752165fa3ba0cf22c1dfd589d6e6f62",
+  "schemaSha256": "550db845c8e6556f782758dad93e00007e10a9f1559721b85ecf167dc0221669",
   "tables": [
     "account_audit_events",
     "account_identities",
     "accounts",
+    "auth_rate_limits",
     "auth_sessions",
     "billing_events",
     "email_magic_link_tokens",
@@ -43,6 +48,7 @@
     "account_audit_events",
     "account_identities",
     "accounts",
+    "auth_rate_limits",
     "auth_sessions",
     "email_magic_link_tokens",
     "family_profiles"

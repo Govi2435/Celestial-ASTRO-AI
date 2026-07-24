@@ -1,8 +1,21 @@
 import { loadAccountPersistenceRuntime } from "../../../account-persistence-runtime.ts";
+import { D1AuthRateLimitStore } from "../../../auth-rate-limit-d1.ts";
+import {
+  AUTH_RATE_LIMITS,
+  AuthRateLimitError,
+  applyRateLimitErrorHeaders,
+  enforceAuthRateLimit,
+} from "../../../auth-rate-limit.ts";
+import { revokeAuthenticatedServerSession } from "../../../authenticated-session-revocation.ts";
+import {
+  RequestSecurityError,
+  assertSessionCsrf,
+} from "../../../request-security.ts";
 import { D1ServerSessionStore } from "../../../server-session-d1.ts";
 import {
+  ServerSessionError,
+  authenticateServerSession,
   clearServerSessionCookie,
-  revokeServerSession,
 } from "../../../server-session.ts";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +28,14 @@ const COMMON_HEADERS = {
   "X-Content-Type-Options": "nosniff",
 } as const;
 
-function response(status: number, outcome: string) {
-  const headers = new Headers(COMMON_HEADERS);
-  headers.set("X-Celestial-Session", outcome);
-  headers.append("Set-Cookie", clearServerSessionCookie());
-  return new Response(null, { status, headers });
+function response(status: number, outcome: string, error?: string, headers?: Headers) {
+  const responseHeaders = headers ?? new Headers(COMMON_HEADERS);
+  responseHeaders.set("X-Celestial-Session", outcome);
+  if (error) responseHeaders.set("X-Celestial-Session-Error", error);
+  if (status === 204 || status === 401) responseHeaders.append("Set-Cookie", clearServerSessionCookie());
+  if (status === 204) return new Response(null, { status, headers: responseHeaders });
+  responseHeaders.set("Content-Type", "application/json; charset=utf-8");
+  return Response.json({ error: error ?? outcome }, { status, headers: responseHeaders });
 }
 
 export async function POST(request: Request) {
@@ -27,23 +43,34 @@ export async function POST(request: Request) {
   if (runtime.appEnv !== "staging") return response(404, "not-found");
   if (!runtime.db) return response(503, "configuration-required");
 
-  const requestUrl = new URL(request.url);
-  if (requestUrl.protocol !== "https:") return response(404, "not-found");
-  const origin = request.headers.get("origin");
-  if (origin && origin !== requestUrl.origin) return response(403, "origin-rejected");
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if (fetchSite && !["same-origin", "none"].includes(fetchSite)) {
-    return response(403, "site-rejected");
-  }
-
+  const store = new D1ServerSessionStore(runtime.db);
   try {
-    await revokeServerSession(
-      new D1ServerSessionStore(runtime.db),
-      request.headers.get("cookie"),
-      "logout",
+    const authenticated = await authenticateServerSession(store, request.headers.get("cookie"));
+    await assertSessionCsrf(request, store, authenticated.session.id);
+    const rateLimit = await enforceAuthRateLimit(
+      new D1AuthRateLimitStore(runtime.db),
+      AUTH_RATE_LIMITS.logout,
+      `${authenticated.account.id}:${authenticated.session.id}`,
     );
-    return response(204, "revoked");
-  } catch {
-    return response(204, "cleared");
+    await revokeAuthenticatedServerSession(store, authenticated.session, "logout");
+    const headers = new Headers(COMMON_HEADERS);
+    headers.set("RateLimit-Limit", String(rateLimit.limit));
+    headers.set("RateLimit-Remaining", String(rateLimit.remaining));
+    headers.set("RateLimit-Reset", String(rateLimit.resetSeconds));
+    return response(204, "revoked", undefined, headers);
+  } catch (error) {
+    if (error instanceof RequestSecurityError) {
+      return response(error.status, "security-rejected", error.code);
+    }
+    if (error instanceof AuthRateLimitError) {
+      const headers = new Headers(COMMON_HEADERS);
+      applyRateLimitErrorHeaders(headers, error);
+      return response(error.status, "rate-limited", error.code, headers);
+    }
+    if (error instanceof ServerSessionError) {
+      return response(error.status >= 500 ? 502 : error.status, "session-rejected", error.code);
+    }
+    console.warn("Logout request rejected", { code: "logout_unexpected", status: 500 });
+    return response(502, "unexpected", "logout_unexpected");
   }
 }
