@@ -1,7 +1,7 @@
 # Celestial ASTRO AI — Continuous Integration
 
-- Status: Active baseline
-- Jira: `KAN-17 / ASTRO-111–ASTRO-114`
+- Status: Active CI baseline; branch-protection policy prepared, live activation pending
+- Jira: `KAN-17 / ASTRO-111–ASTRO-115`
 - Workflow: `.github/workflows/ci.yml`
 
 ## Current automated checks
@@ -78,11 +78,23 @@ Before upload, `npm run artifact:validate` enforces all of the following:
 
 The workflow does not upload `.env` files, the full environment, dependency caches, `.next`, source maps, generated PDFs, database files, birth data or report content. Generated local evidence under `artifacts/` is ignored by Git.
 
+## Main-branch protection policy
+
+The reviewed desired state is stored in `.github/policies/main-branch-protection.json`. It requires pull requests, strict success from all four CI jobs, conversation resolution, admin enforcement, and blocks force pushes and deletion.
+
+The apply-and-verify command is:
+
+```text
+GITHUB_ADMIN_TOKEN=<short-lived-token> npm run github:protect-main
+```
+
+Live branch protection is GitHub control-plane state. The policy and script are auditable repository assets, but ASTRO-115 is not operationally complete until the live `main` protection is applied and read back successfully. See `docs/BRANCH_PROTECTION.md`.
+
 ## Current limitations
 
-CI checks and retained test evidence are active, but they are not yet mandatory merge gates. The following remain pending:
+The following remain pending:
 
-- branch protection and required status checks;
+- live activation and verification of the committed `main` branch-protection policy;
 - staging deployment and promotion;
 - security and dependency scanning;
 - full P7/P8 typed-schema parity and production migration execution.
