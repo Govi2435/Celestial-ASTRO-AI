@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  findDeployment,
+  parseWranglerOutput,
+} from "../scripts/read-wrangler-deploy-output.mjs";
+import {
   assertSafeStagingConfig,
   loadStagingConfig,
 } from "../scripts/validate-staging-deployment.mjs";
@@ -43,12 +47,38 @@ test("staging workflow uses least privilege and an isolated environment", () => 
   assert.match(workflow, /cancel-in-progress: false/);
 });
 
-test("staging uses Cloudflare environment secrets without application secrets", () => {
+test("staging uses the locked local Wrangler CLI and only Cloudflare environment secrets", () => {
   assert.match(workflow, /secrets\.CLOUDFLARE_API_TOKEN/);
   assert.match(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/);
-  assert.match(workflow, /uses: cloudflare\/wrangler-action@v3/);
-  assert.match(workflow, /command: deploy --config wrangler\.staging\.jsonc/);
+  assert.match(workflow, /WRANGLER_OUTPUT_FILE_PATH/);
+  assert.match(workflow, /\.\/node_modules\/\.bin\/wrangler deploy --config wrangler\.staging\.jsonc/);
+  assert.match(workflow, /read-wrangler-deploy-output\.mjs/);
+  assert.doesNotMatch(workflow, /cloudflare\/wrangler-action/);
   assert.doesNotMatch(workflow, /OPENAI_API_KEY|RAZORPAY_KEY|rzp_live|production/i);
+});
+
+test("structured Wrangler output produces the staging deployment URL", () => {
+  const records = parseWranglerOutput(
+    [
+      JSON.stringify({ type: "wrangler-session", version: 1 }),
+      JSON.stringify({
+        type: "deploy",
+        worker_name: "cosmicsphere-staging",
+        version_id: "version-123",
+        targets: ["https://cosmicsphere-staging.example.workers.dev"],
+      }),
+    ].join("\n"),
+  );
+
+  assert.deepEqual(findDeployment(records), {
+    deploymentUrl: "https://cosmicsphere-staging.example.workers.dev",
+    versionId: "version-123",
+  });
+
+  assert.throws(
+    () => findDeployment([{ type: "deploy", worker_name: "cosmicsphere" }]),
+    /HTTPS deployment target|Unexpected deployed Worker/,
+  );
 });
 
 test("staging validates, smoke tests, and retains bounded evidence", () => {
