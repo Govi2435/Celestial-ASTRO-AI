@@ -1,6 +1,6 @@
 # Celestial ASTRO AI — Continuous Integration
 
-- Status: Active CI and protected `main`; staging workflow prepared, live activation pending
+- Status: Active CI, protected `main`, and automatic staging deployment
 - Jira: `KAN-17 / ASTRO-111–ASTRO-116`
 - Core workflow: `.github/workflows/ci.yml`
 - Staging workflow: `.github/workflows/deploy-staging.yml`
@@ -94,11 +94,11 @@ The live rule targets `main` and enforces:
 
 Required approving reviews remain disabled while the repository is solo-owned, preventing author self-lockout. See `docs/BRANCH_PROTECTION.md` for the full policy and recovery procedure.
 
-## Staging deployment contract
+## Active staging deployment
 
 `.github/workflows/deploy-staging.yml` deploys an isolated Worker named `cosmicsphere-staging`.
 
-Automatic deployment is eligible only after the core `CI` workflow succeeds for a push to protected `main`, and only when repository variable `STAGING_DEPLOY_ENABLED` is `true`. A manual dispatch from `main` supports first activation and controlled recovery.
+Automatic deployment runs only after the core `CI` workflow succeeds for a push to protected `main` and repository variable `STAGING_DEPLOY_ENABLED` equals `true`. Manual dispatch from `main` remains available for controlled recovery.
 
 The workflow:
 
@@ -106,20 +106,28 @@ The workflow:
 - uses GitHub environment `staging`;
 - requires only `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`;
 - builds and validates the vinext artifact;
-- deploys with `wrangler.staging.jsonc`;
+- deploys with the repository-locked Wrangler CLI and `wrangler.staging.jsonc`;
 - smoke tests `/` and `/api/certification`;
 - records the returned deployment URL; and
 - uploads secret-scanned deployment evidence for 14 days.
 
-The staging config has no production route, D1, R2, KV, Durable Object or service binding. Production promotion is not part of this workflow. See `docs/STAGING_DEPLOYMENT.md` for activation and rollback instructions.
+Activation was verified on 2026-07-24:
+
+- workflow run: `30071674127`;
+- source SHA: `a6d6855e2ef83c52013814bc0d9415ee7b3e24b3`;
+- staging URL: `https://cosmicsphere-staging.govindapp2403.workers.dev`;
+- deployment outcome: success;
+- smoke outcome: success; and
+- automatic staging variable: enabled.
+
+The staging config has no production route, D1, R2, KV, Durable Object or service binding. Production promotion is not part of this workflow. See `docs/STAGING_DEPLOYMENT.md` for operation and rollback instructions.
 
 ## Current limitations
 
 The following remain pending:
 
-- live staging environment credentials and first successful deployment;
 - production deployment and promotion;
 - security and dependency scanning;
 - full P7/P8 typed-schema parity and production migration execution.
 
-These controls remain tracked under ASTRO-116 and P9-D. They must not be described as active before their evidence exists.
+These controls remain tracked in the later launch backlog and must not be described as active before their evidence exists.
