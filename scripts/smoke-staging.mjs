@@ -29,6 +29,15 @@ function firstSetCookie(headers) {
   return headers.get("set-cookie");
 }
 
+function visibleText(html) {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, " ")
+    .replace(/<[^>]+>/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
 function clientAssetUrls(html) {
   const matches = html.matchAll(/(?:href|src)=["']([^"']+\.(?:css|m?js)(?:\?[^"']*)?)["']/giu);
   const unique = new Map();
@@ -147,7 +156,7 @@ async function verify() {
   assert.equal(sessionConsole.response.status, 200);
   assert.match(sessionConsole.response.headers.get("content-type") ?? "", /text\/html/i);
   const sessionConsoleHtml = await sessionConsole.response.text();
-  assert.match(sessionConsoleHtml, /Your signed-in sessions/i);
+  assert.match(visibleText(sessionConsoleHtml), /Your signed-in sessions\./i);
   const clientAssets = await verifyClientAssets(sessionConsoleHtml);
 
   const certification = await request("/api/certification");
