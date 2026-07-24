@@ -11,15 +11,25 @@ export function loadStagingConfig(path = configPath) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-export function assertSafeStagingConfig(config, { allowD1 = false } = {}) {
+export function assertSafeStagingConfig(
+  config,
+  { allowD1 = false, allowRuntimePaths = false } = {},
+) {
+  const expectedMain = allowRuntimePaths
+    ? "../dist/server/index.js"
+    : "./dist/server/index.js";
+  const expectedAssetsDirectory = allowRuntimePaths
+    ? "../dist/client"
+    : "./dist/client";
+
   assert.equal(config.name, "cosmicsphere-staging");
-  assert.equal(config.main, "./dist/server/index.js");
+  assert.equal(config.main, expectedMain);
   assert.equal(config.workers_dev, true);
   assert.equal(config.preview_urls, false);
   assert.deepEqual(config.compatibility_flags, ["nodejs_compat"]);
 
   assert.deepEqual(config.assets, {
-    directory: "./dist/client",
+    directory: expectedAssetsDirectory,
     binding: "ASSETS",
     run_worker_first: true,
   });

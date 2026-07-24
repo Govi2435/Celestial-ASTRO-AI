@@ -8,8 +8,9 @@ const D1_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 
 function configRelativePath(outputPath, targetPath) {
   const relativePath = relative(dirname(outputPath), targetPath);
-  assert.ok(relativePath, "Runtime config path must not replace the migrations directory.");
-  return relativePath.split(sep).join("/");
+  assert.ok(relativePath, "Runtime config path must not replace its target path.");
+  const normalized = relativePath.split(sep).join("/");
+  return normalized.startsWith(".") ? normalized : `./${normalized}`;
 }
 
 export function prepareStagingWranglerConfig({
@@ -20,6 +21,15 @@ export function prepareStagingWranglerConfig({
 } = {}) {
   const config = JSON.parse(readFileSync(inputPath, "utf8"));
   delete config.d1_databases;
+
+  const inputDirectory = dirname(inputPath);
+  const mainPath = resolve(inputDirectory, config.main);
+  const assetsPath = resolve(inputDirectory, config.assets?.directory ?? "");
+  config.main = configRelativePath(outputPath, mainPath);
+  config.assets = {
+    ...config.assets,
+    directory: configRelativePath(outputPath, assetsPath),
+  };
 
   let accountPersistence = "pending";
   if (databaseId) {

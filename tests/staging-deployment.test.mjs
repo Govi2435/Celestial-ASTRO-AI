@@ -51,25 +51,31 @@ test("staging injects only the isolated D1 identifier and applies reviewed migra
   assert.doesNotMatch(workflow, /OPENAI_API_KEY|RAZORPAY_KEY|GOOGLE_CLIENT_SECRET|EMAIL_MAGIC_LINK_SECRET|rzp_live|production/i);
 });
 
-test("runtime staging config supports pending or exactly one approved D1 binding", () => {
+test("runtime staging config resolves Worker, assets, and migrations from its own directory", () => {
   assert.doesNotThrow(() => assertSafeStagingConfig(config));
   assert.equal(Object.hasOwn(config, "d1_databases"), false);
   const directory = mkdtempSync(join(tmpdir(), "celestial-staging-config-"));
   try {
     const inputPath = join(directory, "input.json");
-    const pendingPath = join(directory, "pending.json");
     const runtimeDirectory = join(directory, ".wrangler");
+    const pendingPath = join(runtimeDirectory, "pending.json");
     const readyPath = join(runtimeDirectory, "ready.json");
     const migrationsPath = join(directory, "drizzle");
+    const workerPath = join(directory, "dist/server/index.js");
+    const assetsPath = join(directory, "dist/client");
     mkdirSync(runtimeDirectory);
-    mkdirSync(migrationsPath);
+    mkdirSync(migrationsPath, { recursive: true });
+    mkdirSync(dirname(workerPath), { recursive: true });
+    mkdirSync(assetsPath, { recursive: true });
     writeFileSync(inputPath, JSON.stringify(config));
 
     const pending = prepareStagingWranglerConfig({ inputPath, outputPath: pendingPath, databaseId: "" });
     assert.equal(pending.accountPersistence, "pending");
     const pendingConfig = JSON.parse(readFileSync(pendingPath, "utf8"));
     assert.equal(Object.hasOwn(pendingConfig, "d1_databases"), false);
-    assert.doesNotThrow(() => assertSafeStagingConfig(pendingConfig));
+    assert.doesNotThrow(() =>
+      assertSafeStagingConfig(pendingConfig, { allowRuntimePaths: true }),
+    );
 
     const ready = prepareStagingWranglerConfig({
       inputPath,
@@ -79,13 +85,20 @@ test("runtime staging config supports pending or exactly one approved D1 binding
     });
     assert.equal(ready.accountPersistence, "ready");
     const readyConfig = JSON.parse(readFileSync(readyPath, "utf8"));
-    assert.doesNotThrow(() => assertSafeStagingConfig(readyConfig, { allowD1: true }));
+    assert.doesNotThrow(() =>
+      assertSafeStagingConfig(readyConfig, { allowD1: true, allowRuntimePaths: true }),
+    );
     assert.deepEqual(readyConfig.d1_databases[0], {
       binding: "DB",
       database_name: "cosmicsphere-staging-db",
       database_id: "11111111-2222-4333-8444-555555555555",
       migrations_dir: "../drizzle",
     });
+    assert.equal(resolve(dirname(readyPath), readyConfig.main), resolve(workerPath));
+    assert.equal(
+      resolve(dirname(readyPath), readyConfig.assets.directory),
+      resolve(assetsPath),
+    );
     assert.equal(
       resolve(dirname(readyPath), readyConfig.d1_databases[0].migrations_dir),
       resolve(migrationsPath),
