@@ -71,6 +71,34 @@ jobs:
       - name: Run strict TypeScript check
         run: npm run typecheck
 
+  migration-drift:
+    name: Migration drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.19.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Replay migrations and verify schema baseline
+        run: npm run db:validate
+
   test:
     name: Unit, build, and rendered HTML
     runs-on: ubuntu-24.04
