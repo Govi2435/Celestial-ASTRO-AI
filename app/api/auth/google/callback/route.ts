@@ -15,6 +15,11 @@ import { verifyGoogleIdTokenAtEdge } from "../../../../google-id-token-verifier.
 import { exchangeGoogleAuthorizationCodeAtEdge } from "../../../../google-oauth-token-exchange.ts";
 import { getGoogleOAuthDiagnostic } from "../../../../google-oauth-diagnostics.ts";
 import { loadGoogleOAuthRuntime } from "../../../../google-oauth-runtime.ts";
+import { D1ServerSessionStore } from "../../../../server-session-d1.ts";
+import {
+  ServerSessionError,
+  createServerSession,
+} from "../../../../server-session.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +37,8 @@ type CallbackStage =
   | "token_exchange"
   | "id_token_verification"
   | "identity_validation"
-  | "account_persistence";
+  | "account_persistence"
+  | "session_creation";
 
 function notFound() {
   return Response.json({ error: "not_found" }, { status: 404, headers: COMMON_HEADERS });
@@ -45,16 +51,23 @@ function htmlResponse(
   outcome: string,
   diagnosticCode?: string,
   persistenceOutcome?: string,
+  sessionCookie?: string,
+  sessionOutcome?: string,
 ) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Google-OAuth", outcome);
   if (diagnosticCode) headers.set("X-Celestial-Google-OAuth-Error", diagnosticCode);
   if (persistenceOutcome) headers.set("X-Celestial-Account-Persistence", persistenceOutcome);
+  if (sessionOutcome) headers.set("X-Celestial-Session", sessionOutcome);
   headers.append("Set-Cookie", clearGoogleOAuthCookie());
+  if (sessionCookie) headers.append("Set-Cookie", sessionCookie);
   const diagnostic = diagnosticCode
     ? `<p class="diagnostic">Diagnostic code: <code>${diagnosticCode}</code></p>`
     : "";
+  const note = sessionCookie
+    ? "The secure server session is active. Session-management UI follows in ASTRO-126."
+    : "The account and Google identity are durable, but no authenticated session was issued.";
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -68,7 +81,7 @@ function htmlResponse(
     <h1>${title}</h1>
     <p>${message}</p>
     ${diagnostic}
-    <p class="note">The account and Google identity are now durable. This staging flow does not create an authenticated session yet.</p>
+    <p class="note">${note}</p>
   </main>
 </body>
 </html>`;
@@ -77,7 +90,9 @@ function htmlResponse(
 
 function safeDiagnostic(error: unknown, stage: CallbackStage) {
   if (error instanceof GoogleOAuthError) return getGoogleOAuthDiagnostic(error);
-  if (error instanceof AccountPersistenceError) return { code: error.code, status: error.status };
+  if (error instanceof AccountPersistenceError || error instanceof ServerSessionError) {
+    return { code: error.code, status: error.status };
+  }
   return { code: `google_callback_${stage}_unexpected`, status: 500 };
 }
 
@@ -157,25 +172,35 @@ export async function GET(request: Request) {
     }
 
     stage = "account_persistence";
-    const persisted = await persistVerifiedIdentity(
-      new D1AccountIdentityStore(persistence.db),
+    const accountStore = new D1AccountIdentityStore(persistence.db);
+    const persisted = await persistVerifiedIdentity(accountStore, {
+      provider: "google",
+      subject: identity.subject,
+      email: identity.email,
+      emailVerified: true,
+      displayName: identity.displayName,
+      pictureUrl: identity.pictureUrl,
+    });
+
+    stage = "session_creation";
+    const authenticated = await createServerSession(
+      new D1ServerSessionStore(persistence.db),
       {
-        provider: "google",
-        subject: identity.subject,
-        email: identity.email,
-        emailVerified: true,
-        displayName: identity.displayName,
-        pictureUrl: identity.pictureUrl,
+        accountId: persisted.accountId,
+        identityId: persisted.identityId,
+        authMethod: "google",
       },
     );
 
     return htmlResponse(
       200,
-      "Google account identity persisted",
-      `The ${GOOGLE_OAUTH_PROFILE.id} flow completed and the verified identity was stored successfully.`,
-      "identity-persisted",
+      "Google authenticated session created",
+      `The ${GOOGLE_OAUTH_PROFILE.id} flow completed, the verified identity was stored, and a secure server session was issued.`,
+      "session-created",
       undefined,
       persisted.outcome,
+      authenticated.setCookie,
+      "created",
     );
   } catch (error) {
     const diagnostic = safeDiagnostic(error, stage);
@@ -187,9 +212,11 @@ export async function GET(request: Request) {
     return htmlResponse(
       diagnostic.status >= 500 ? 502 : diagnostic.status,
       "Google sign-in could not be completed",
-      "The authorization response or account persistence step was rejected. Start a new sign-in attempt.",
+      "The authorization, account persistence, or session creation step was rejected. Start a new sign-in attempt.",
       "verification-failed",
       diagnostic.code,
+      "failed",
+      undefined,
       "failed",
     );
   }
