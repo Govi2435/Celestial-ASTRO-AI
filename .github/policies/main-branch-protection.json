@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "repository": "Govi2435/Celestial-ASTRO-AI",
+  "branch": "main",
+  "requiredStatusChecks": [
+    "Lint",
+    "Type check",
+    "Migration drift",
+    "Unit, build, and rendered HTML"
+  ],
+  "requireBranchesToBeUpToDate": true,
+  "requirePullRequest": true,
+  "requiredApprovingReviewCount": 0,
+  "dismissStaleReviews": false,
+  "requireCodeOwnerReviews": false,
+  "requireLastPushApproval": false,
+  "requireConversationResolution": true,
+  "enforceAdmins": true,
+  "requireLinearHistory": false,
+  "allowForcePushes": false,
+  "allowDeletions": false,
+  "blockCreations": false,
+  "lockBranch": false,
+  "allowForkSyncing": false
+}
