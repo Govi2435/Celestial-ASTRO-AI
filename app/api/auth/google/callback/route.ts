@@ -3,9 +3,9 @@ import {
   GoogleOAuthError,
   clearGoogleOAuthCookie,
   parseGoogleOAuthCookie,
-  verifyGoogleIdToken,
   verifyGoogleOAuthTransaction,
 } from "../../../../google-oauth.ts";
+import { verifyGoogleIdTokenAtEdge } from "../../../../google-id-token-verifier.ts";
 import { exchangeGoogleAuthorizationCodeAtEdge } from "../../../../google-oauth-token-exchange.ts";
 import { getGoogleOAuthDiagnostic } from "../../../../google-oauth-diagnostics.ts";
 import { loadGoogleOAuthRuntime } from "../../../../google-oauth-runtime.ts";
@@ -131,7 +131,7 @@ export async function GET(request: Request) {
     );
 
     stage = "id_token_verification";
-    const identity = await verifyGoogleIdToken(tokens.idToken, {
+    const identity = await verifyGoogleIdTokenAtEdge(tokens.idToken, {
       clientId: runtime.config.clientId,
       nonce: transaction.nonce,
     });
