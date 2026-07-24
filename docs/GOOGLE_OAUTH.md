@@ -38,8 +38,11 @@ When staging credentials are configured, the route:
 
 1. generates state, nonce and PKCE values;
 2. signs a ten-minute OAuth transaction;
-3. places it in `__Host-celestial_google_oauth` with `Path=/`, `HttpOnly`, `Secure` and `SameSite=Lax`; and
-4. redirects to Google's authorization endpoint.
+3. places it in `__Host-celestial_google_oauth` with `Path=/`, `HttpOnly`, `Secure` and `SameSite=Lax`;
+4. returns a no-store `200` handoff page so the browser commits the host-only cookie; and
+5. immediately navigates to Google's authorization endpoint through a refresh handoff with a manual fallback link.
+
+The cookie-first handoff avoids losing the OAuth transaction cookie during an immediate cross-site redirect on the Vinext/Cloudflare runtime.
 
 When credentials are absent, staging returns:
 
