@@ -51,6 +51,11 @@ test("staging injects only the isolated D1 identifier and applies reviewed migra
   assert.doesNotMatch(workflow, /OPENAI_API_KEY|RAZORPAY_KEY|GOOGLE_CLIENT_SECRET|EMAIL_MAGIC_LINK_SECRET|rzp_live|production/i);
 });
 
+test("staging serves built assets before invoking the Worker", () => {
+  assert.equal(config.assets.run_worker_first, false);
+  assert.doesNotMatch(JSON.stringify(config.assets), /true/);
+});
+
 test("runtime staging config resolves Worker, assets, and migrations from its own directory", () => {
   assert.doesNotThrow(() => assertSafeStagingConfig(config));
   assert.equal(Object.hasOwn(config, "d1_databases"), false);
@@ -73,9 +78,7 @@ test("runtime staging config resolves Worker, assets, and migrations from its ow
     assert.equal(pending.accountPersistence, "pending");
     const pendingConfig = JSON.parse(readFileSync(pendingPath, "utf8"));
     assert.equal(Object.hasOwn(pendingConfig, "d1_databases"), false);
-    assert.doesNotThrow(() =>
-      assertSafeStagingConfig(pendingConfig, { allowRuntimePaths: true }),
-    );
+    assert.doesNotThrow(() => assertSafeStagingConfig(pendingConfig, { allowRuntimePaths: true }));
 
     const ready = prepareStagingWranglerConfig({
       inputPath,
@@ -85,9 +88,7 @@ test("runtime staging config resolves Worker, assets, and migrations from its ow
     });
     assert.equal(ready.accountPersistence, "ready");
     const readyConfig = JSON.parse(readFileSync(readyPath, "utf8"));
-    assert.doesNotThrow(() =>
-      assertSafeStagingConfig(readyConfig, { allowD1: true, allowRuntimePaths: true }),
-    );
+    assert.doesNotThrow(() => assertSafeStagingConfig(readyConfig, { allowD1: true, allowRuntimePaths: true }));
     assert.deepEqual(readyConfig.d1_databases[0], {
       binding: "DB",
       database_name: "cosmicsphere-staging-db",
@@ -95,14 +96,8 @@ test("runtime staging config resolves Worker, assets, and migrations from its ow
       migrations_dir: "../drizzle",
     });
     assert.equal(resolve(dirname(readyPath), readyConfig.main), resolve(workerPath));
-    assert.equal(
-      resolve(dirname(readyPath), readyConfig.assets.directory),
-      resolve(assetsPath),
-    );
-    assert.equal(
-      resolve(dirname(readyPath), readyConfig.d1_databases[0].migrations_dir),
-      resolve(migrationsPath),
-    );
+    assert.equal(resolve(dirname(readyPath), readyConfig.assets.directory), resolve(assetsPath));
+    assert.equal(resolve(dirname(readyPath), readyConfig.d1_databases[0].migrations_dir), resolve(migrationsPath));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
