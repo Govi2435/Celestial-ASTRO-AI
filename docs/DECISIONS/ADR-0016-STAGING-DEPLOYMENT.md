@@ -1,6 +1,6 @@
 # ADR-0016 — Protected Staging Deployment
 
-- Status: Accepted implementation; live activation pending successful staging deploy
+- Status: Accepted and active
 - Date: 2026-07-24
 - Jira: `KAN-17 / ASTRO-116`
 
@@ -14,7 +14,7 @@ The current product does not have active D1 or R2 bindings, production authentic
 
 Add `.github/workflows/deploy-staging.yml` and deploy to a dedicated Cloudflare Worker named `cosmicsphere-staging` using `wrangler.staging.jsonc`.
 
-Automatic deployment runs only after the `CI` workflow succeeds for a push to protected `main`, and only while repository variable `STAGING_DEPLOY_ENABLED` equals `true`. Manual dispatch from `main` remains available for initial activation and controlled recovery.
+Automatic deployment runs only after the `CI` workflow succeeds for a push to protected `main`, and only while repository variable `STAGING_DEPLOY_ENABLED` equals `true`. Manual dispatch from `main` remains available for controlled recovery.
 
 The workflow checks out the CI-proven commit SHA, installs locked dependencies, builds and validates the vinext artifact, deploys through the repository-locked local Wrangler binary, smoke tests the homepage and certification API, and uploads bounded deployment evidence.
 
@@ -29,7 +29,7 @@ The GitHub job targets environment `staging`. It requires only:
 - `CLOUDFLARE_API_TOKEN`; and
 - `CLOUDFLARE_ACCOUNT_ID`.
 
-The token must be narrowly scoped to the intended Cloudflare account and Worker deployment operations. No application or production secrets are required.
+The token is scoped to the intended Cloudflare account and Worker deployment operations. No application or production secrets are required.
 
 ## Bindings and routing
 
@@ -46,18 +46,20 @@ Deployment and smoke failures remain real workflow failures. Evidence-writing an
 
 The workflow does not automatically roll back. Immediate rollback uses Cloudflare deployment history to restore the previously known-good version, followed by a repository fix through the protected pull-request flow.
 
-## Activation boundary
+## Activation evidence
 
-Repository implementation is complete when the workflow, config, validation, smoke tests and documentation pass CI and merge. ASTRO-116 is operationally complete only after:
+ASTRO-116 became operationally active on 2026-07-24 after all launch conditions passed:
 
-1. the GitHub `staging` environment has the two Cloudflare secrets;
-2. a manual deployment from `main` succeeds;
-3. smoke tests pass against the returned deployment URL;
-4. the evidence artifact is reviewed; and
-5. `STAGING_DEPLOY_ENABLED=true` is set when automatic deployment is approved.
+1. GitHub environment `staging` was restricted to `main`.
+2. `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` were configured as environment secrets.
+3. Manual workflow run `30071674127` deployed source SHA `a6d6855e2ef83c52013814bc0d9415ee7b3e24b3`.
+4. Worker `cosmicsphere-staging` deployed to `https://cosmicsphere-staging.govindapp2403.workers.dev`.
+5. Homepage and `/api/certification` smoke checks passed.
+6. Evidence artifact `staging-deployment-evidence-30071674127-1` passed safety validation.
+7. Repository variable `STAGING_DEPLOY_ENABLED=true` was enabled for automatic releases after successful protected-main CI.
 
 Production promotion remains out of scope.
 
 ## Consequences
 
-The project gains a repeatable pre-production runtime check tied to the protected commit and CI evidence. Deployment credentials are isolated from core CI, production remains untouched, and future persistence or payment work cannot be represented as active merely because staging exists.
+The project now has a repeatable, active pre-production runtime check tied to the protected commit and CI evidence. Deployment credentials are isolated from core CI, production remains untouched, and future persistence or payment work cannot be represented as active merely because staging exists.
