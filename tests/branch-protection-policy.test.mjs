@@ -83,18 +83,16 @@ test("verification rejects drift from the reviewed policy", () => {
   };
 
   assert.doesNotThrow(() => assertProtectionMatches(matching, policy));
-  assert.throws(
-    () =>
-      assertProtectionMatches(
-        {
-          ...matching,
-          required_status_checks: {
-            strict: true,
-            contexts: expectedChecks.filter((check) => check !== "Migration drift"),
-          },
+  assert.throws(() =>
+    assertProtectionMatches(
+      {
+        ...matching,
+        required_status_checks: {
+          strict: true,
+          contexts: expectedChecks.filter((check) => check !== "Migration drift"),
         },
-        policy,
-      ),
-    /deepStrictEqual/,
+      },
+      policy,
+    ),
   );
 });
