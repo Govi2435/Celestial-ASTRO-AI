@@ -9,8 +9,8 @@ import {
 test("committed migrations match the recorded schema baseline", () => {
   const baseline = validateMigrationBaseline();
 
-  assert.equal(baseline.migrations.length, 3);
-  assert.equal(baseline.tables.length, 11);
+  assert.equal(baseline.migrations.length, 4);
+  assert.equal(baseline.tables.length, 13);
   assert.equal(baseline.schemaSha256.length, 64);
 });
 
@@ -27,7 +27,9 @@ test("typed-schema parity remains explicit until P9-D closes it", () => {
   assert.equal(baseline.typedSchemaParity, "partial");
   assert.deepEqual(baseline.typedSchemaTables, [
     "account_audit_events",
+    "account_identities",
     "accounts",
+    "email_magic_link_tokens",
     "family_profiles",
   ]);
   assert.ok(baseline.tables.length > baseline.typedSchemaTables.length);
