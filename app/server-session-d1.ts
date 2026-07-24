@@ -6,7 +6,7 @@ import type {
   SessionAuthMethod,
 } from "./server-session.ts";
 
-type SessionRow = {
+export type SessionRow = {
   id: string;
   account_id: string;
   identity_id: string;
@@ -33,7 +33,7 @@ function changes(result: { meta?: { changes?: number } }) {
   return Number(result.meta?.changes ?? 0);
 }
 
-function mapSession(row: SessionRow): ServerSessionRecord {
+export function mapSession(row: SessionRow): ServerSessionRecord {
   return {
     id: row.id,
     accountId: row.account_id,
@@ -59,6 +59,9 @@ function mapAccount(row: AccountRow): SessionAccount {
     status: row.status,
   };
 }
+
+const SESSION_COLUMNS =
+  "id, account_id, identity_id, token_hash, auth_method, created_at, issued_at, last_seen_at, expires_at, absolute_expires_at, revoked_at, revoke_reason, rotation_count";
 
 export class D1ServerSessionStore implements ServerSessionStore {
   constructor(private readonly db: D1Database) {}
@@ -86,7 +89,7 @@ export class D1ServerSessionStore implements ServerSessionStore {
   async findSessionByTokenHash(tokenHash: string) {
     const row = await this.db
       .prepare(
-        "SELECT id, account_id, identity_id, token_hash, auth_method, created_at, issued_at, last_seen_at, expires_at, absolute_expires_at, revoked_at, revoke_reason, rotation_count FROM auth_sessions WHERE token_hash = ? LIMIT 1",
+        `SELECT ${SESSION_COLUMNS} FROM auth_sessions WHERE token_hash = ? LIMIT 1`,
       )
       .bind(tokenHash)
       .first<SessionRow>();
@@ -163,6 +166,47 @@ export class D1ServerSessionStore implements ServerSessionStore {
       .bind(revokedAt, reason, tokenHash)
       .run();
     return changes(result) === 1;
+  }
+
+  async listAccountSessions(accountId: string, activeAt: string, limit: number) {
+    const boundedLimit = Math.max(1, Math.min(25, Math.trunc(limit)));
+    const result = await this.db
+      .prepare(
+        `SELECT ${SESSION_COLUMNS} FROM auth_sessions WHERE account_id = ? AND revoked_at IS NULL AND expires_at > ? AND absolute_expires_at > ? ORDER BY last_seen_at DESC, created_at DESC LIMIT ?`,
+      )
+      .bind(accountId, activeAt, activeAt, boundedLimit)
+      .all<SessionRow>();
+    return (result.results ?? []).map(mapSession);
+  }
+
+  async revokeSessionById(
+    accountId: string,
+    sessionId: string,
+    revokedAt: string,
+    reason: string,
+  ) {
+    const result = await this.db
+      .prepare(
+        "UPDATE auth_sessions SET revoked_at = ?, revoke_reason = ? WHERE id = ? AND account_id = ? AND revoked_at IS NULL",
+      )
+      .bind(revokedAt, reason, sessionId, accountId)
+      .run();
+    return changes(result) === 1;
+  }
+
+  async revokeOtherSessions(
+    accountId: string,
+    currentSessionId: string,
+    revokedAt: string,
+    reason: string,
+  ) {
+    const result = await this.db
+      .prepare(
+        "UPDATE auth_sessions SET revoked_at = ?, revoke_reason = ? WHERE account_id = ? AND id <> ? AND revoked_at IS NULL",
+      )
+      .bind(revokedAt, reason, accountId, currentSessionId)
+      .run();
+    return changes(result);
   }
 
   async appendAudit(
