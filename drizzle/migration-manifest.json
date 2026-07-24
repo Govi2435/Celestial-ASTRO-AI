@@ -1,0 +1,37 @@
+{
+  "formatVersion": 1,
+  "migrations": [
+    {
+      "file": "0000_p6_account_vault.sql",
+      "normalizedSha256": "dc269b92fc8801b5454b0481bcfbcfb0af529d2d94c9843671fa49ffe08617d6"
+    },
+    {
+      "file": "0001_p7_billing.sql",
+      "normalizedSha256": "fdc9796c2687a3fc3b3b8b5e73c380253d354d6d6a3d47e37fdc36162b25aa96"
+    },
+    {
+      "file": "0002_p8_professional_dashboard.sql",
+      "normalizedSha256": "0a358366dc7c627d4e0f24136d254f22ad0742a859f2acafe33127674e1cd514"
+    }
+  ],
+  "schemaSha256": "051419dc8274cd0caf2f89caa7d2e66c74303345e6bd92e9bc9d32bfa4fdd3ce",
+  "tables": [
+    "account_audit_events",
+    "accounts",
+    "billing_events",
+    "family_profiles",
+    "premium_report_grants",
+    "professional_appointments",
+    "professional_cases",
+    "professional_members",
+    "professional_notes",
+    "professional_workspaces",
+    "subscriptions"
+  ],
+  "typedSchemaTables": [
+    "account_audit_events",
+    "accounts",
+    "family_profiles"
+  ],
+  "typedSchemaParity": "partial"
+}
