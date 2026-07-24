@@ -59,9 +59,11 @@ The workflow:
 - runs the verified vinext build;
 - validates `dist/server/index.js`, `dist/client` and the packaged hosting manifest;
 - refuses staging configuration containing production names, routes, D1, R2 or recognizable live credentials;
-- deploys with `cloudflare/wrangler-action@v3` and `wrangler.staging.jsonc`;
+- deploys with the locked local `./node_modules/.bin/wrangler` binary and `wrangler.staging.jsonc`;
+- captures Wrangler structured output and validates the returned staging Worker URL;
 - records the deployment URL as the GitHub environment URL;
 - smoke tests `/` and `/api/certification` over HTTPS;
+- preserves full Wrangler errors directly in the Actions log;
 - preserves real deployment and smoke failures; and
 - uploads bounded, secret-scanned evidence for 14 days.
 
