@@ -159,6 +159,13 @@ test("staging smoke rejects unstyled or non-hydrating deployments", () => {
   assert.match(smokeScript, /javascript/);
 });
 
+test("staging smoke normalizes rendered markup before checking visible session text", () => {
+  assert.match(smokeScript, /function visibleText\(html\)/);
+  assert.match(smokeScript, /replace\(\/<\[\^>\]\+>\/gu, " "\)/);
+  assert.match(smokeScript, /assert\.match\(visibleText\(sessionConsoleHtml\), \/Your signed-in sessions\\\.\/i\)/);
+  assert.doesNotMatch(smokeScript, /assert\.match\(sessionConsoleHtml, \/Your signed-in sessions\/i\)/);
+});
+
 test("repository exposes the staging operating commands", () => {
   assert.equal(packageJson.scripts["staging:validate"], "node scripts/validate-staging-deployment.mjs");
   assert.equal(packageJson.scripts["staging:smoke"], "node scripts/smoke-staging.mjs");
