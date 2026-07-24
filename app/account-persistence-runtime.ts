@@ -1,5 +1,3 @@
-import { env } from "cloudflare:workers";
-
 export type AccountPersistenceRuntime = {
   appEnv: string;
   db: D1Database | null;
@@ -12,6 +10,7 @@ function readString(value: unknown) {
 
 export async function loadAccountPersistenceRuntime(): Promise<AccountPersistenceRuntime> {
   try {
+    const { env } = await import("cloudflare:workers");
     const appEnv = readString(env.APP_ENV) ?? "unknown";
     const db = env.DB ?? null;
     return {
