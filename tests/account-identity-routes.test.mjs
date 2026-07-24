@@ -36,9 +36,17 @@ test("account persistence migration enforces provider and token uniqueness", () 
   assert.match(migration, /`consumed_at` text/);
 });
 
-test("ASTRO-124 does not issue an authenticated session", () => {
+test("ASTRO-125 creates sessions only after verified identity persistence", () => {
   for (const source of [googleCallback, emailVerify]) {
-    assert.doesNotMatch(source, /celestial_session|sessionToken|createSession|Set-Cookie[^\n]*session/i);
-    assert.match(source, /does not create an authenticated session yet/);
+    const persistenceIndex = source.indexOf("persistVerifiedIdentity");
+    const sessionIndex = source.indexOf("createServerSession", persistenceIndex);
+    assert.ok(persistenceIndex >= 0);
+    assert.ok(sessionIndex > persistenceIndex);
+    assert.match(source, /X-Celestial-Session/);
   }
+  assert.ok(
+    emailVerify.indexOf("consumeDurableMagicLink") <
+      emailVerify.indexOf("createServerSession", emailVerify.indexOf("persistVerifiedIdentity")),
+    "Email link must be consumed before its authenticated session is issued.",
+  );
 });
