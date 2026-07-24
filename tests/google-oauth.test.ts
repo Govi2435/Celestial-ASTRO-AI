@@ -64,7 +64,7 @@ async function createJwtFixture(overrides: Record<string, unknown> = {}) {
   const signature = await crypto.subtle.sign(
     "RSASSA-PKCS1-v1_5",
     keyPair.privateKey,
-    Buffer.from(signingInput),
+    new TextEncoder().encode(signingInput),
   );
   return {
     idToken: `${signingInput}.${Buffer.from(signature).toString("base64url")}`,
