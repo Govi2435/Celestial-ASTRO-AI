@@ -17,16 +17,27 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function request(pathname) {
+async function request(pathname, init = {}) {
   const target = new URL(pathname, baseUrl);
+  const headers = new Headers(init.headers);
+  if (!headers.has("Accept")) {
+    headers.set("Accept", pathname.startsWith("/api/") ? "application/json" : "text/html");
+  }
+  headers.set("User-Agent", "Celestial-ASTRO-AI-staging-smoke/1.0");
+
   const response = await fetch(target, {
-    headers: {
-      Accept: pathname.startsWith("/api/") ? "application/json" : "text/html",
-      "User-Agent": "Celestial-ASTRO-AI-staging-smoke/1.0",
-    },
-    redirect: "follow",
+    ...init,
+    headers,
+    redirect: init.redirect ?? "follow",
   });
   return { response, target };
+}
+
+function firstSetCookie(headers) {
+  if (typeof headers.getSetCookie === "function") {
+    return headers.getSetCookie()[0] ?? null;
+  }
+  return headers.get("set-cookie");
 }
 
 async function verify() {
@@ -57,9 +68,65 @@ async function verify() {
   assert.ok(payload.methods?.ayanamsa, "Certification payload is missing ayanamsa data.");
   assert.ok(Array.isArray(payload.limitations), "Certification limitations must be an array.");
 
+  const authProbe = await request("/api/auth/compatibility");
+  assert.equal(authProbe.response.status, 200, `Auth compatibility probe returned ${authProbe.response.status}.`);
+  assert.match(
+    authProbe.response.headers.get("cache-control") ?? "",
+    /no-store/i,
+    "Auth compatibility response must not be cached.",
+  );
+  const authPayload = await authProbe.response.json();
+  assert.equal(authPayload.status, "compatible", "Auth compatibility status must be compatible.");
+  for (const [capability, supported] of Object.entries(authPayload.capabilities ?? {})) {
+    assert.equal(supported, true, `Auth capability ${capability} did not pass.`);
+  }
+
+  const setCookie = firstSetCookie(authProbe.response.headers);
+  assert.ok(setCookie?.startsWith("__Host-celestial_auth_probe="), "Secure probe cookie is missing.");
+  assert.match(setCookie, /HttpOnly/i, "Probe cookie must be HttpOnly.");
+  assert.match(setCookie, /Secure/i, "Probe cookie must be Secure.");
+  assert.match(setCookie, /SameSite=Lax/i, "Probe cookie must use SameSite=Lax.");
+  const cookiePair = setCookie.split(";", 1)[0];
+
+  const cookieRoundTrip = await request("/api/auth/compatibility", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: cookiePair,
+    },
+    body: JSON.stringify({ returnTo: "/account/sessions?source=staging" }),
+  });
+  assert.equal(cookieRoundTrip.response.status, 200, "Auth cookie round-trip failed.");
+  const roundTripPayload = await cookieRoundTrip.response.json();
+  assert.equal(roundTripPayload.cookieRoundTrip, true, "Auth cookie was not returned to the route handler.");
+  assert.equal(roundTripPayload.tokenHashing, true, "Auth token hashing did not pass.");
+  assert.equal(
+    roundTripPayload.safeReturnTo,
+    "/account/sessions?source=staging",
+    "Same-origin OAuth return target was not preserved.",
+  );
+
+  const redirectProbe = await request("/api/auth/compatibility?mode=redirect", {
+    redirect: "manual",
+  });
+  assert.equal(redirectProbe.response.status, 302, "Auth redirect compatibility failed.");
+  assert.match(
+    redirectProbe.response.headers.get("location") ?? "",
+    /\/api\/auth\/compatibility\?mode=inspect$/,
+    "Auth redirect target is invalid.",
+  );
+
+  const clearProbe = await request("/api/auth/compatibility", {
+    method: "DELETE",
+    headers: { Cookie: cookiePair },
+  });
+  assert.equal(clearProbe.response.status, 204, "Auth cookie clear request failed.");
+  assert.match(firstSetCookie(clearProbe.response.headers) ?? "", /Max-Age=0/i, "Auth cookie was not cleared.");
+
   return {
     homepage: homepage.target.href,
     certification: certification.target.href,
+    authCompatibility: authProbe.target.href,
     certificateHeader: certification.response.headers.get("x-celestial-certificate"),
   };
 }
@@ -71,6 +138,7 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
     console.log(`[staging-smoke] PASS attempt=${attempt} base=${baseUrl.origin}`);
     console.log(`[staging-smoke] homepage=${result.homepage}`);
     console.log(`[staging-smoke] certification=${result.certification}`);
+    console.log(`[staging-smoke] authCompatibility=${result.authCompatibility}`);
     console.log(
       `[staging-smoke] certificate=${result.certificateHeader ?? "header-not-present"}`,
     );

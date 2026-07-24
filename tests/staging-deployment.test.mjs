@@ -14,6 +14,10 @@ const workflow = readFileSync(
   new URL("../.github/workflows/deploy-staging.yml", import.meta.url),
   "utf8",
 );
+const smokeScript = readFileSync(
+  new URL("../scripts/smoke-staging.mjs", import.meta.url),
+  "utf8",
+);
 const config = loadStagingConfig(
   new URL("../wrangler.staging.jsonc", import.meta.url),
 );
@@ -92,6 +96,18 @@ test("staging validates, smoke tests, and retains bounded evidence", () => {
   assert.match(workflow, /retention-days: 14/);
   assert.match(workflow, /if-no-files-found: error/);
   assert.match(workflow, /include-hidden-files: false/);
+});
+
+test("staging smoke verifies the authentication compatibility contract", () => {
+  assert.match(smokeScript, /\/api\/auth\/compatibility/);
+  assert.match(smokeScript, /__Host-celestial_auth_probe=/);
+  assert.match(smokeScript, /method: "POST"/);
+  assert.match(smokeScript, /method: "DELETE"/);
+  assert.match(smokeScript, /SameSite=Lax/);
+  assert.match(smokeScript, /cookieRoundTrip/);
+  assert.match(smokeScript, /tokenHashing/);
+  assert.match(smokeScript, /mode=redirect/);
+  assert.doesNotMatch(smokeScript, /console\.log\([^\n]*(cookiePair|setCookie)/);
 });
 
 test("Wrangler staging config is isolated and has only current bindings", () => {
