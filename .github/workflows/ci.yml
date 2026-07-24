@@ -69,7 +69,16 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Run strict TypeScript check
-        run: npm run typecheck
+        run: npm run typecheck 2>&1 | tee typecheck-errors.txt
+
+      - name: Upload temporary type-check diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: astro-112-typecheck-errors
+          path: typecheck-errors.txt
+          if-no-files-found: error
+          retention-days: 1
 
   test:
     name: Unit, build, and rendered HTML
