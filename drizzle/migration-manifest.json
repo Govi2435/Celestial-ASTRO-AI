@@ -16,13 +16,18 @@
     {
       "file": "0003_p9_account_identity_persistence.sql",
       "normalizedSha256": "06f29ae3b2bb3f6c14c9da67a43a08fb0f5f7d9f18bb05c2e24eed059f9313dc"
+    },
+    {
+      "file": "0004_p9_secure_server_sessions.sql",
+      "normalizedSha256": "9b8c5058a6f17d432453c02743b4056e599f198381057751fb2c5d30c3d69e90"
     }
   ],
-  "schemaSha256": "12ea693549e365051d930fb869c39a8afb57c5715b0f8ce32a0b85693410501c",
+  "schemaSha256": "b9441200877b2a2171197f30e16013d63752165fa3ba0cf22c1dfd589d6e6f62",
   "tables": [
     "account_audit_events",
     "account_identities",
     "accounts",
+    "auth_sessions",
     "billing_events",
     "email_magic_link_tokens",
     "family_profiles",
@@ -38,6 +43,7 @@
     "account_audit_events",
     "account_identities",
     "accounts",
+    "auth_sessions",
     "email_magic_link_tokens",
     "family_profiles"
   ],
