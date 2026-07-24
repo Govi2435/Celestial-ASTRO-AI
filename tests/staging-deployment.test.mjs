@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { findDeployment, parseWranglerOutput } from "../scripts/read-wrangler-deploy-output.mjs";
 import { prepareStagingWranglerConfig } from "../scripts/prepare-staging-wrangler-config.mjs";
@@ -58,7 +58,11 @@ test("runtime staging config supports pending or exactly one approved D1 binding
   try {
     const inputPath = join(directory, "input.json");
     const pendingPath = join(directory, "pending.json");
-    const readyPath = join(directory, "ready.json");
+    const runtimeDirectory = join(directory, ".wrangler");
+    const readyPath = join(runtimeDirectory, "ready.json");
+    const migrationsPath = join(directory, "drizzle");
+    mkdirSync(runtimeDirectory);
+    mkdirSync(migrationsPath);
     writeFileSync(inputPath, JSON.stringify(config));
 
     const pending = prepareStagingWranglerConfig({ inputPath, outputPath: pendingPath, databaseId: "" });
@@ -71,6 +75,7 @@ test("runtime staging config supports pending or exactly one approved D1 binding
       inputPath,
       outputPath: readyPath,
       databaseId: "11111111-2222-4333-8444-555555555555",
+      migrationsPath,
     });
     assert.equal(ready.accountPersistence, "ready");
     const readyConfig = JSON.parse(readFileSync(readyPath, "utf8"));
@@ -79,8 +84,12 @@ test("runtime staging config supports pending or exactly one approved D1 binding
       binding: "DB",
       database_name: "cosmicsphere-staging-db",
       database_id: "11111111-2222-4333-8444-555555555555",
-      migrations_dir: "drizzle",
+      migrations_dir: "../drizzle",
     });
+    assert.equal(
+      resolve(dirname(readyPath), readyConfig.d1_databases[0].migrations_dir),
+      resolve(migrationsPath),
+    );
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
