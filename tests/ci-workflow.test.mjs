@@ -28,29 +28,37 @@ test("core CI uses least privilege and a pinned supported runtime", () => {
   assert.match(workflow, /runs-on: ubuntu-24\.04/);
   assert.match(workflow, /timeout-minutes: 20/);
   assert.doesNotMatch(workflow, /\$\{\{\s*secrets\./);
+  assert.doesNotMatch(workflow, /continue-on-error:\s*true/);
 });
 
-test("CI exposes independent lint, type-check, and test jobs", () => {
+test("CI exposes independent quality, migration, and test jobs", () => {
   assert.match(workflow, /^  lint:\n    name: Lint$/m);
   assert.match(workflow, /^  typecheck:\n    name: Type check$/m);
+  assert.match(workflow, /^  migration-drift:\n    name: Migration drift$/m);
   assert.match(workflow, /^  test:\n    name: Unit, build, and rendered HTML$/m);
   assert.match(workflow, /run: npm run lint/);
-  assert.match(workflow, /npm run typecheck/);
+  assert.match(workflow, /run: npm run typecheck/);
+  assert.match(workflow, /run: npm run db:validate/);
   assert.match(workflow, /run: npm test/);
 });
 
-test("quality commands use the repository lint and strict no-emit contracts", () => {
+test("repository commands keep strict quality and migration contracts", () => {
   assert.match(packageJson.scripts.lint, /eslint/);
   assert.match(packageJson.scripts.typecheck, /tsc --noEmit --pretty false/);
+  assert.equal(packageJson.scripts["db:validate"], "node scripts/validate-migrations.mjs");
+  assert.equal(
+    packageJson.scripts["db:baseline"],
+    "node scripts/validate-migrations.mjs --write",
+  );
 });
 
 test("all CI jobs install from the committed lockfile", () => {
   assert.equal(
     (workflow.match(/cache-dependency-path: package-lock\.json/g) ?? []).length,
-    3,
+    4,
   );
   assert.equal(
     (workflow.match(/run: npm ci --no-audit --no-fund/g) ?? []).length,
-    3,
+    4,
   );
 });
