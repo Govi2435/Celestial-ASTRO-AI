@@ -16,7 +16,9 @@ const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 async function request(pathname, init = {}) {
   const target = new URL(pathname, baseUrl);
   const headers = new Headers(init.headers);
-  if (!headers.has("Accept")) headers.set("Accept", pathname.startsWith("/api/") ? "application/json" : "text/html");
+  if (!headers.has("Accept")) {
+    headers.set("Accept", target.pathname.startsWith("/api/") ? "application/json" : "text/html");
+  }
   headers.set("User-Agent", "Celestial-ASTRO-AI-staging-smoke/1.0");
   const response = await fetch(target, { ...init, headers, redirect: init.redirect ?? "follow" });
   return { response, target };
@@ -25,6 +27,45 @@ async function request(pathname, init = {}) {
 function firstSetCookie(headers) {
   if (typeof headers.getSetCookie === "function") return headers.getSetCookie()[0] ?? null;
   return headers.get("set-cookie");
+}
+
+function clientAssetUrls(html) {
+  const matches = html.matchAll(/(?:href|src)=["']([^"']+\.(?:css|m?js)(?:\?[^"']*)?)["']/giu);
+  const unique = new Map();
+  for (const match of matches) {
+    const target = new URL(match[1], baseUrl);
+    if (target.origin !== baseUrl.origin) continue;
+    unique.set(target.href, target);
+  }
+  return [...unique.values()].slice(0, 20);
+}
+
+async function verifyClientAssets(html) {
+  const assets = clientAssetUrls(html);
+  assert.ok(assets.some((asset) => /\.css$/iu.test(asset.pathname)), "Rendered session console must reference a stylesheet.");
+  assert.ok(assets.some((asset) => /\.m?js$/iu.test(asset.pathname)), "Rendered session console must reference client JavaScript.");
+
+  for (const asset of assets) {
+    const isCss = /\.css$/iu.test(asset.pathname);
+    const result = await request(asset, {
+      headers: { Accept: isCss ? "text/css,*/*;q=0.1" : "text/javascript,application/javascript,*/*;q=0.1" },
+    });
+    assert.equal(result.response.status, 200, `Client asset was unavailable: ${asset.pathname}`);
+    const contentType = result.response.headers.get("content-type") ?? "";
+    assert.match(
+      contentType,
+      isCss ? /text\/css/i : /(?:text|application)\/javascript/i,
+      `Unexpected client asset content type for ${asset.pathname}: ${contentType}`,
+    );
+    const body = await result.response.text();
+    assert.ok(body.length > 0, `Client asset was empty: ${asset.pathname}`);
+  }
+
+  return {
+    count: assets.length,
+    stylesheet: assets.find((asset) => /\.css$/iu.test(asset.pathname))?.pathname ?? "missing",
+    script: assets.find((asset) => /\.m?js$/iu.test(asset.pathname))?.pathname ?? "missing",
+  };
 }
 
 async function verifyGoogleOAuthStart() {
@@ -102,6 +143,13 @@ async function verify() {
   assert.match(homepage.response.headers.get("content-type") ?? "", /text\/html/i);
   assert.match(await homepage.response.text(), /Celestial ASTRO AI/i);
 
+  const sessionConsole = await request("/account/sessions");
+  assert.equal(sessionConsole.response.status, 200);
+  assert.match(sessionConsole.response.headers.get("content-type") ?? "", /text\/html/i);
+  const sessionConsoleHtml = await sessionConsole.response.text();
+  assert.match(sessionConsoleHtml, /Your signed-in sessions/i);
+  const clientAssets = await verifyClientAssets(sessionConsoleHtml);
+
   const certification = await request("/api/certification");
   assert.equal(certification.response.status, 200);
   assert.match(certification.response.headers.get("content-type") ?? "", /application\/json/i);
@@ -147,6 +195,8 @@ async function verify() {
 
   return {
     homepage: homepage.target.href,
+    sessionConsole: sessionConsole.target.href,
+    clientAssets,
     certification: certification.target.href,
     authCompatibility: authProbe.target.href,
     googleOAuth: await verifyGoogleOAuthStart(),
@@ -161,6 +211,10 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const result = await verify();
     console.log(`[staging-smoke] PASS attempt=${attempt} base=${baseUrl.origin}`);
     console.log(`[staging-smoke] homepage=${result.homepage}`);
+    console.log(`[staging-smoke] sessionConsole=${result.sessionConsole}`);
+    console.log(`[staging-smoke] clientAssets=${result.clientAssets.count}`);
+    console.log(`[staging-smoke] stylesheet=${result.clientAssets.stylesheet}`);
+    console.log(`[staging-smoke] script=${result.clientAssets.script}`);
     console.log(`[staging-smoke] certification=${result.certification}`);
     console.log(`[staging-smoke] authCompatibility=${result.authCompatibility}`);
     console.log(`[staging-smoke] googleOAuth=${result.googleOAuth}`);

@@ -53,6 +53,7 @@ test("staging injects only the isolated D1 identifier and applies reviewed migra
 
 test("runtime staging config resolves Worker, assets, and migrations from its own directory", () => {
   assert.doesNotThrow(() => assertSafeStagingConfig(config));
+  assert.equal(config.assets.run_worker_first, false);
   assert.equal(Object.hasOwn(config, "d1_databases"), false);
   const directory = mkdtempSync(join(tmpdir(), "celestial-staging-config-"));
   try {
@@ -147,6 +148,15 @@ test("staging smoke accepts configuration-pending or ready account persistence",
   assert.match(smokeScript, /__Host-celestial_auth_probe=/);
   assert.match(smokeScript, /SameSite=Lax/);
   assert.doesNotMatch(smokeScript, /console\.log\([^\n]*(cookiePair|setCookie)/);
+});
+
+test("staging smoke rejects unstyled or non-hydrating deployments", () => {
+  assert.match(smokeScript, /\/account\/sessions/);
+  assert.match(smokeScript, /Rendered session console must reference a stylesheet/);
+  assert.match(smokeScript, /Rendered session console must reference client JavaScript/);
+  assert.match(smokeScript, /Client asset was unavailable/);
+  assert.match(smokeScript, /text\\\/css/);
+  assert.match(smokeScript, /javascript/);
 });
 
 test("repository exposes the staging operating commands", () => {
