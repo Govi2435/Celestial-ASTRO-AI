@@ -51,11 +51,13 @@ test("current-session route validates, rotates, and returns bounded identity dat
   assert.doesNotMatch(sessionRoute, /tokenHash|identityId/u);
 });
 
-test("logout is POST-only, same-origin guarded, revokes, and clears the cookie", () => {
+test("logout is POST-only, session-authenticated, CSRF guarded, throttled, and clears the cookie", () => {
   assert.match(logoutRoute, /export async function POST/u);
   assert.doesNotMatch(logoutRoute, /export async function GET/u);
-  assert.match(logoutRoute, /origin !== requestUrl\.origin/u);
-  assert.match(logoutRoute, /sec-fetch-site/u);
+  assert.match(logoutRoute, /authenticateServerSession/u);
+  assert.match(logoutRoute, /assertSessionCsrf/u);
+  assert.match(logoutRoute, /AUTH_RATE_LIMITS\.logout/u);
+  assert.match(logoutRoute, /enforceAuthRateLimit/u);
   assert.match(logoutRoute, /revokeServerSession/u);
   assert.match(logoutRoute, /clearServerSessionCookie/u);
 });
