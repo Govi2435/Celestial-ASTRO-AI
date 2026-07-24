@@ -1,6 +1,6 @@
 # ADR-0016 — Protected Staging Deployment
 
-- Status: Accepted implementation; live activation pending staging credentials
+- Status: Accepted implementation; live activation pending successful staging deploy
 - Date: 2026-07-24
 - Jira: `KAN-17 / ASTRO-116`
 
@@ -16,7 +16,11 @@ Add `.github/workflows/deploy-staging.yml` and deploy to a dedicated Cloudflare 
 
 Automatic deployment runs only after the `CI` workflow succeeds for a push to protected `main`, and only while repository variable `STAGING_DEPLOY_ENABLED` equals `true`. Manual dispatch from `main` remains available for initial activation and controlled recovery.
 
-The workflow checks out the CI-proven commit SHA, installs locked dependencies, builds and validates the vinext artifact, deploys through `cloudflare/wrangler-action@v3`, smoke tests the homepage and certification API, and uploads bounded deployment evidence.
+The workflow checks out the CI-proven commit SHA, installs locked dependencies, builds and validates the vinext artifact, deploys through the repository-locked local Wrangler binary, smoke tests the homepage and certification API, and uploads bounded deployment evidence.
+
+Wrangler structured output is captured through `WRANGLER_OUTPUT_FILE_PATH` and parsed by `scripts/read-wrangler-deploy-output.mjs`. The parser rejects a missing HTTPS target or a Worker name other than `cosmicsphere-staging`.
+
+The initial activation attempt used `cloudflare/wrangler-action@v3`, which surfaced only a generic `npx` exit-code failure. The workflow now invokes `./node_modules/.bin/wrangler` directly so the complete Cloudflare diagnostic remains visible in the Actions log and the deployed URL is taken from Wrangler's structured output.
 
 ## Environment and credentials
 
