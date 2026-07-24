@@ -129,5 +129,22 @@ jobs:
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Run verified test suite
-        run: npm test
+      - name: Run verified test suite with captured evidence
+        id: test_suite
+        run: npm run test:ci
+
+      - name: Validate test artifact safety
+        id: artifact_safety
+        if: ${{ always() }}
+        run: npm run artifact:validate
+
+      - name: Upload test evidence
+        if: ${{ always() && steps.artifact_safety.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-test-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/ci/test
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 9
+          include-hidden-files: false
