@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import {
   AccountPersistenceError,
   auditEventId,
