@@ -1,0 +1,129 @@
+name: Staging Deployment
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: staging-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: Deploy staging
+    if: >-
+      ${{
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'workflow_run' &&
+          vars.STAGING_DEPLOY_ENABLED == 'true' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main')
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: ${{ steps.deploy.outputs.deployment-url }}
+
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      SOURCE_CI_RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}
+
+    steps:
+      - name: Check out protected main commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.19.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Prepare staging evidence directory
+        run: |
+          rm -rf artifacts/staging
+          mkdir -p artifacts/staging
+          : > artifacts/staging/smoke.log
+
+      - name: Verify staging credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          missing=0
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
+            echo "Missing staging environment secret: CLOUDFLARE_API_TOKEN" >&2
+            missing=1
+          fi
+          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo "Missing staging environment secret: CLOUDFLARE_ACCOUNT_ID" >&2
+            missing=1
+          fi
+          exit "${missing}"
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build verified vinext artifact
+        run: npm run build
+
+      - name: Validate isolated staging artifact
+        run: npm run staging:validate
+
+      - name: Deploy isolated staging Worker
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: npm
+          command: deploy --config wrangler.staging.jsonc
+
+      - name: Run staging smoke checks
+        id: smoke
+        env:
+          STAGING_BASE_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          set -o pipefail
+          npm run staging:smoke -- "${STAGING_BASE_URL}" 2>&1 | tee artifacts/staging/smoke.log
+
+      - name: Write staging deployment evidence
+        if: ${{ always() }}
+        env:
+          STAGING_BASE_URL: ${{ steps.deploy.outputs.deployment-url }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+        run: npm run staging:evidence
+
+      - name: Validate staging evidence safety
+        id: staging_evidence
+        if: ${{ always() }}
+        run: npm run staging:evidence:validate
+
+      - name: Upload staging deployment evidence
+        if: ${{ always() && steps.staging_evidence.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-deployment-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/staging
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 9
+          include-hidden-files: false

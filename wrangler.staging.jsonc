@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cosmicsphere-staging",
+  "main": "./dist/server/index.js",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "images": {
+    "binding": "IMAGES"
+  },
+  "vars": {
+    "APP_ENV": "staging",
+    "DEPLOYMENT_CHANNEL": "github-actions"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
