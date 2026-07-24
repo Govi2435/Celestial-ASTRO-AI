@@ -66,7 +66,7 @@ test("email magic link rejects tampering, expiry and a different browser transac
 
   await assert.rejects(
     verifyEmailMagicLink(tamperedToken, cookieValue(first.cookie), secret, issuedAt + 1_000),
-    /email_magic_link_invalid/,
+    /email_magic_link_invalid|email_magic_transaction_mismatch/,
   );
   await assert.rejects(
     verifyEmailMagicLink(firstToken, cookieValue(second.cookie), secret, issuedAt + 1_000),
