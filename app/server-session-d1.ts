@@ -1,4 +1,5 @@
 import { auditEventId } from "./account-identity-persistence.ts";
+import type { SessionCsrfStore } from "./request-security.ts";
 import type {
   ServerSessionRecord,
   ServerSessionStore,
@@ -63,8 +64,12 @@ function mapAccount(row: AccountRow): SessionAccount {
 const SESSION_COLUMNS =
   "id, account_id, identity_id, token_hash, auth_method, created_at, issued_at, last_seen_at, expires_at, absolute_expires_at, revoked_at, revoke_reason, rotation_count";
 
-export class D1ServerSessionStore implements ServerSessionStore {
-  constructor(private readonly db: D1Database) {}
+export class D1ServerSessionStore implements ServerSessionStore, SessionCsrfStore {
+  private readonly db: D1Database;
+
+  constructor(db: D1Database) {
+    this.db = db;
+  }
 
   async createSession(session: ServerSessionRecord) {
     await this.db
@@ -161,7 +166,7 @@ export class D1ServerSessionStore implements ServerSessionStore {
   ) {
     const result = await this.db
       .prepare(
-        "UPDATE auth_sessions SET revoked_at = ?, revoke_reason = ? WHERE token_hash = ? AND revoked_at IS NULL",
+        "UPDATE auth_sessions SET revoked_at = ?, revoke_reason = ?, csrf_token_hash = '', csrf_issued_at = '' WHERE token_hash = ? AND revoked_at IS NULL",
       )
       .bind(revokedAt, reason, tokenHash)
       .run();
@@ -187,7 +192,7 @@ export class D1ServerSessionStore implements ServerSessionStore {
   ) {
     const result = await this.db
       .prepare(
-        "UPDATE auth_sessions SET revoked_at = ?, revoke_reason = ? WHERE id = ? AND account_id = ? AND revoked_at IS NULL",
+        "UPDATE auth_sessions SET revoked_at = ?, revoke_reason = ?, csrf_token_hash = '', csrf_issued_at = '' WHERE id = ? AND account_id = ? AND revoked_at IS NULL",
       )
       .bind(revokedAt, reason, sessionId, accountId)
       .run();
@@ -202,11 +207,31 @@ export class D1ServerSessionStore implements ServerSessionStore {
   ) {
     const result = await this.db
       .prepare(
-        "UPDATE auth_sessions SET revoked_at = ?, revoke_reason = ? WHERE account_id = ? AND id <> ? AND revoked_at IS NULL",
+        "UPDATE auth_sessions SET revoked_at = ?, revoke_reason = ?, csrf_token_hash = '', csrf_issued_at = '' WHERE account_id = ? AND id <> ? AND revoked_at IS NULL",
       )
       .bind(revokedAt, reason, accountId, currentSessionId)
       .run();
     return changes(result);
+  }
+
+  async setSessionCsrfTokenHash(sessionId: string, tokenHash: string, issuedAt: string) {
+    const result = await this.db
+      .prepare(
+        "UPDATE auth_sessions SET csrf_token_hash = ?, csrf_issued_at = ? WHERE id = ? AND revoked_at IS NULL AND expires_at > ? AND absolute_expires_at > ?",
+      )
+      .bind(tokenHash, issuedAt, sessionId, issuedAt, issuedAt)
+      .run();
+    return changes(result) === 1;
+  }
+
+  async matchesSessionCsrfTokenHash(sessionId: string, tokenHash: string) {
+    const row = await this.db
+      .prepare(
+        "SELECT 1 AS matched FROM auth_sessions WHERE id = ? AND csrf_token_hash = ? AND revoked_at IS NULL LIMIT 1",
+      )
+      .bind(sessionId, tokenHash)
+      .first<{ matched: number }>();
+    return Number(row?.matched ?? 0) === 1;
   }
 
   async appendAudit(
