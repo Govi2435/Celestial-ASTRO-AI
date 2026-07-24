@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import styles from "./sessions.module.css";
 
 type ManagedSession = {
@@ -53,6 +53,33 @@ function shortSessionId(value: string) {
   return `${value.slice(0, 8)}…${value.slice(-5)}`;
 }
 
+async function readSessionView(): Promise<ViewState> {
+  try {
+    const response = await fetch("/api/auth/sessions", {
+      credentials: "include",
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    const payload = (await response.json()) as SessionPayload;
+    if (!response.ok || !payload.authenticated || !payload.account || !payload.sessions) {
+      if (response.status === 401 || payload.error?.startsWith("session_")) {
+        return { status: "anonymous", reason: payload.error };
+      }
+      throw new Error(payload.error || "Sessions could not be loaded.");
+    }
+    return {
+      status: "ready",
+      account: payload.account,
+      sessions: payload.sessions,
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "Sessions could not be loaded.",
+    };
+  }
+}
+
 function MoonMark() {
   return (
     <span className={styles.moonMark} aria-hidden="true">
@@ -67,37 +94,15 @@ export default function SessionManagementPage() {
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
-  const loadSessions = useCallback(async () => {
-    try {
-      const response = await fetch("/api/auth/sessions", {
-        credentials: "include",
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-      });
-      const payload = (await response.json()) as SessionPayload;
-      if (!response.ok || !payload.authenticated || !payload.account || !payload.sessions) {
-        if (response.status === 401 || payload.error?.startsWith("session_")) {
-          setView({ status: "anonymous", reason: payload.error });
-          return;
-        }
-        throw new Error(payload.error || "Sessions could not be loaded.");
-      }
-      setView({
-        status: "ready",
-        account: payload.account,
-        sessions: payload.sessions,
-      });
-    } catch (error) {
-      setView({
-        status: "error",
-        message: error instanceof Error ? error.message : "Sessions could not be loaded.",
-      });
-    }
-  }, []);
-
   useEffect(() => {
-    void loadSessions();
-  }, [loadSessions]);
+    let cancelled = false;
+    void readSessionView().then((nextView) => {
+      if (!cancelled) setView(nextView);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const otherSessionCount =
     view.status === "ready"
@@ -192,7 +197,7 @@ export default function SessionManagementPage() {
 
   function retryLoading() {
     setView({ status: "loading" });
-    void loadSessions();
+    void readSessionView().then(setView);
   }
 
   return (
