@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import {
   AUTH_COMPATIBILITY_PROFILE,
   clearCompatibilityCookie,
@@ -19,8 +18,13 @@ const COMMON_HEADERS = {
   "X-Content-Type-Options": "nosniff",
 } as const;
 
-function isStagingRuntime() {
-  return env.APP_ENV === "staging";
+async function isStagingRuntime() {
+  try {
+    const { env } = await import("cloudflare:workers");
+    return env.APP_ENV === "staging";
+  } catch {
+    return false;
+  }
 }
 
 function notFound() {
@@ -43,7 +47,7 @@ function json(payload: Record<string, unknown>, init: ResponseInit = {}) {
 }
 
 export async function GET(request: Request) {
-  if (!isStagingRuntime()) return notFound();
+  if (!(await isStagingRuntime())) return notFound();
 
   const url = new URL(request.url);
   if (url.searchParams.get("mode") === "redirect") {
@@ -87,7 +91,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!isStagingRuntime()) return notFound();
+  if (!(await isStagingRuntime())) return notFound();
 
   const token = parseCompatibilityCookie(request.headers.get("cookie"));
   if (!token) {
@@ -118,7 +122,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  if (!isStagingRuntime()) return notFound();
+  if (!(await isStagingRuntime())) return notFound();
 
   const headers = new Headers(COMMON_HEADERS);
   headers.append("Set-Cookie", clearCompatibilityCookie());
