@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 
 export type AccountPersistenceRuntime = {
   appEnv: string;
-  db: typeof env.DB | null;
+  db: D1Database | null;
   missing: string[];
 };
 
