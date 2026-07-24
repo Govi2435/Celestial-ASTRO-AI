@@ -19,6 +19,14 @@ const COMMON_HEADERS = {
   "X-Content-Type-Options": "nosniff",
 } as const;
 
+type CallbackStage =
+  | "transaction_cookie"
+  | "transaction_verification"
+  | "state_validation"
+  | "token_exchange"
+  | "id_token_verification"
+  | "identity_validation";
+
 function notFound() {
   return Response.json({ error: "not_found" }, { status: 404, headers: COMMON_HEADERS });
 }
@@ -60,6 +68,14 @@ function htmlResponse(
   return new Response(html, { status, headers });
 }
 
+function safeDiagnostic(error: unknown, stage: CallbackStage) {
+  if (error instanceof GoogleOAuthError) return getGoogleOAuthDiagnostic(error);
+  return {
+    code: `google_callback_${stage}_unexpected`,
+    status: 500,
+  };
+}
+
 export async function GET(request: Request) {
   const runtime = await loadGoogleOAuthRuntime();
   if (runtime.appEnv !== "staging") return notFound();
@@ -87,17 +103,25 @@ export async function GET(request: Request) {
     );
   }
 
+  let stage: CallbackStage = "transaction_cookie";
+
   try {
     const cookieValue = parseGoogleOAuthCookie(request.headers.get("cookie"));
     if (!cookieValue) throw new GoogleOAuthError("oauth_transaction_missing");
+
+    stage = "transaction_verification";
     const transaction = await verifyGoogleOAuthTransaction(
       cookieValue,
       runtime.config.cookieSecret,
     );
+
+    stage = "state_validation";
     const returnedState = requestUrl.searchParams.get("state");
     if (!returnedState || returnedState !== transaction.state) {
       throw new GoogleOAuthError("oauth_state_mismatch");
     }
+
+    stage = "token_exchange";
     const code = requestUrl.searchParams.get("code");
     const tokens = await exchangeGoogleAuthorizationCode(
       runtime.config,
@@ -105,10 +129,14 @@ export async function GET(request: Request) {
       transaction.codeVerifier,
       redirectUri,
     );
+
+    stage = "id_token_verification";
     const identity = await verifyGoogleIdToken(tokens.idToken, {
       clientId: runtime.config.clientId,
       nonce: transaction.nonce,
     });
+
+    stage = "identity_validation";
     if (identity.provider !== "google" || !identity.emailVerified) {
       throw new GoogleOAuthError("google_identity_invalid");
     }
@@ -120,10 +148,11 @@ export async function GET(request: Request) {
       "identity-verified",
     );
   } catch (error) {
-    const diagnostic = getGoogleOAuthDiagnostic(error);
+    const diagnostic = safeDiagnostic(error, stage);
     console.warn("Google OAuth callback rejected", {
       code: diagnostic.code,
       status: diagnostic.status,
+      stage,
     });
     const safeStatus = diagnostic.status >= 500 ? 502 : 400;
     return htmlResponse(
