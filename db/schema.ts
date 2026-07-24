@@ -56,6 +56,35 @@ export const emailMagicLinkTokens = sqliteTable(
   ],
 );
 
+export const authSessions = sqliteTable(
+  "auth_sessions",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    identityId: text("identity_id")
+      .notNull()
+      .references(() => accountIdentities.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    authMethod: text("auth_method", { enum: ["google", "email_magic_link"] }).notNull(),
+    createdAt: text("created_at").notNull(),
+    issuedAt: text("issued_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    absoluteExpiresAt: text("absolute_expires_at").notNull(),
+    revokedAt: text("revoked_at"),
+    revokeReason: text("revoke_reason").notNull().default(""),
+    rotationCount: integer("rotation_count").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("auth_sessions_token_hash_unique").on(table.tokenHash),
+    index("auth_sessions_account_idx").on(table.accountId),
+    index("auth_sessions_account_active_idx").on(table.accountId, table.revokedAt),
+    index("auth_sessions_expiry_idx").on(table.expiresAt),
+  ],
+);
+
 export const familyProfiles = sqliteTable(
   "family_profiles",
   {
