@@ -13,6 +13,11 @@ import {
   clearEmailMagicCookie,
 } from "../../../../email-magic-link.ts";
 import { loadEmailMagicLinkRuntime } from "../../../../email-magic-link-runtime.ts";
+import { D1ServerSessionStore } from "../../../../server-session-d1.ts";
+import {
+  ServerSessionError,
+  createServerSession,
+} from "../../../../server-session.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -35,16 +40,23 @@ function htmlResponse(
   outcome: string,
   diagnosticCode?: string,
   persistenceOutcome?: string,
+  sessionCookie?: string,
+  sessionOutcome?: string,
 ) {
   const headers = new Headers(COMMON_HEADERS);
   headers.set("Content-Type", "text/html; charset=utf-8");
   headers.set("X-Celestial-Email-Magic", outcome);
   if (diagnosticCode) headers.set("X-Celestial-Email-Magic-Error", diagnosticCode);
   if (persistenceOutcome) headers.set("X-Celestial-Account-Persistence", persistenceOutcome);
+  if (sessionOutcome) headers.set("X-Celestial-Session", sessionOutcome);
   headers.append("Set-Cookie", clearEmailMagicCookie());
+  if (sessionCookie) headers.append("Set-Cookie", sessionCookie);
   const diagnostic = diagnosticCode
     ? `<p class="diagnostic">Diagnostic code: <code>${diagnosticCode}</code></p>`
     : "";
+  const note = sessionCookie
+    ? "The secure server session is active. Session-management UI follows in ASTRO-126."
+    : "The account and email identity are durable, but no authenticated session was issued.";
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -58,7 +70,7 @@ function htmlResponse(
     <h1>${title}</h1>
     <p>${message}</p>
     ${diagnostic}
-    <p class="note">The account and email identity are now durable. This staging flow does not create an authenticated session yet.</p>
+    <p class="note">${note}</p>
   </main>
 </body>
 </html>`;
@@ -102,27 +114,39 @@ export async function GET(request: Request) {
       requestUrl.searchParams.get("token"),
       runtime.config.secret,
     );
-    const store = new D1AccountIdentityStore(persistence.db);
-    await assertDurableMagicLinkConsumable(store, verification);
-    const persisted = await persistVerifiedIdentity(store, {
+    const accountStore = new D1AccountIdentityStore(persistence.db);
+    await assertDurableMagicLinkConsumable(accountStore, verification);
+    const persisted = await persistVerifiedIdentity(accountStore, {
       provider: "email_magic_link",
       subject: verification.email,
       email: verification.email,
       emailVerified: true,
     });
-    await consumeDurableMagicLink(store, verification.fingerprint);
+    await consumeDurableMagicLink(accountStore, verification.fingerprint);
+    const authenticated = await createServerSession(
+      new D1ServerSessionStore(persistence.db),
+      {
+        accountId: persisted.accountId,
+        identityId: persisted.identityId,
+        authMethod: "email_magic_link",
+      },
+    );
 
     return htmlResponse(
       200,
-      "Email account identity persisted",
-      `The ${EMAIL_MAGIC_LINK_PROFILE.id} flow completed and the verified identity was stored successfully.`,
-      "identity-persisted",
+      "Email authenticated session created",
+      `The ${EMAIL_MAGIC_LINK_PROFILE.id} flow completed, the verified identity was stored, and a secure server session was issued.`,
+      "session-created",
       undefined,
       persisted.outcome,
+      authenticated.setCookie,
+      "created",
     );
   } catch (error) {
     const diagnostic =
-      error instanceof EmailMagicLinkError || error instanceof AccountPersistenceError
+      error instanceof EmailMagicLinkError ||
+      error instanceof AccountPersistenceError ||
+      error instanceof ServerSessionError
         ? { code: error.code, status: error.status }
         : { code: "email_magic_verify_unexpected", status: 500 };
     console.warn("Email magic-link verification rejected", {
@@ -132,9 +156,11 @@ export async function GET(request: Request) {
     return htmlResponse(
       diagnostic.status >= 500 ? 502 : diagnostic.status,
       "Email sign-in could not be completed",
-      "The sign-in link or account persistence step was rejected. Request a new link.",
+      "The sign-in link, account persistence, or session creation step was rejected. Request a new link.",
       "verification-failed",
       diagnostic.code,
+      "failed",
+      undefined,
       "failed",
     );
   }
