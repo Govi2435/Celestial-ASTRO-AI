@@ -55,8 +55,20 @@ async function verifyGoogleOAuthStart() {
     return "configuration-pending";
   }
 
-  assert.equal(googleStart.response.status, 302, "Google OAuth start must redirect when configured.");
-  const location = new URL(googleStart.response.headers.get("location") ?? "");
+  assert.equal(googleStart.response.status, 200, "Google OAuth start must commit the cookie before navigation.");
+  assert.equal(
+    googleStart.response.headers.get("x-celestial-google-oauth"),
+    "authorization-handoff",
+  );
+  assert.match(
+    googleStart.response.headers.get("content-type") ?? "",
+    /text\/html/i,
+    "Google OAuth handoff must return HTML.",
+  );
+
+  const refresh = googleStart.response.headers.get("refresh") ?? "";
+  assert.match(refresh, /^0;url=https:\/\/accounts\.google\.com\//u);
+  const location = new URL(refresh.replace(/^0;url=/u, ""));
   assert.equal(location.origin, "https://accounts.google.com");
   assert.equal(location.pathname, "/o/oauth2/v2/auth");
   assert.equal(location.searchParams.get("response_type"), "code");
@@ -79,6 +91,9 @@ async function verifyGoogleOAuthStart() {
   assert.match(setCookie, /SameSite=Lax/i);
   assert.match(setCookie, /Max-Age=600/i);
   assert.doesNotMatch(setCookie, /Domain=/i);
+
+  const handoffBody = await googleStart.response.text();
+  assert.match(handoffBody, /Continue with Google/i, "Google OAuth handoff marker is missing.");
   return "authorization-ready";
 }
 
