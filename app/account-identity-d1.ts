@@ -85,7 +85,7 @@ function changes(result: { meta?: { changes?: number } }) {
 }
 
 export class D1AccountIdentityStore implements AccountIdentityStore {
-  constructor(private readonly db: typeof env.DB) {}
+  constructor(private readonly db: D1Database) {}
 
   async findAccountByEmail(email: string) {
     const row = await this.db
