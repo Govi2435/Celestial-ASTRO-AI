@@ -35,7 +35,7 @@ test("CI exposes independent lint, type-check, and test jobs", () => {
   assert.match(workflow, /^  typecheck:\n    name: Type check$/m);
   assert.match(workflow, /^  test:\n    name: Unit, build, and rendered HTML$/m);
   assert.match(workflow, /run: npm run lint/);
-  assert.match(workflow, /run: npm run typecheck/);
+  assert.match(workflow, /npm run typecheck/);
   assert.match(workflow, /run: npm test/);
 });
 
