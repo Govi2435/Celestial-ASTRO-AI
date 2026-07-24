@@ -30,9 +30,10 @@ export async function POST(request: Request) {
     const result = await calculateCelestial(payload.calculation);
     const interpretation = buildInterpretationReport(result);
     const pdfBytes = await buildPremiumReport(result, interpretation);
+    const pdfBody = Uint8Array.from(pdfBytes).buffer;
     const name = result.kind === "timed" ? result.chart.input.name : result.input.name;
 
-    return new Response(pdfBytes, {
+    return new Response(pdfBody, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${reportFilename(name)}"`,
@@ -49,4 +50,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
