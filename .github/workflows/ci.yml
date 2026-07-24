@@ -69,7 +69,9 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Run strict TypeScript check
-        run: npm run typecheck 2>&1 | tee typecheck-errors.txt
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee typecheck-errors.txt
 
       - name: Upload temporary type-check diagnostics
         if: failure()
