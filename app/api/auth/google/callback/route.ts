@@ -2,11 +2,11 @@ import {
   GOOGLE_OAUTH_PROFILE,
   GoogleOAuthError,
   clearGoogleOAuthCookie,
-  exchangeGoogleAuthorizationCode,
   parseGoogleOAuthCookie,
   verifyGoogleIdToken,
   verifyGoogleOAuthTransaction,
 } from "../../../../google-oauth.ts";
+import { exchangeGoogleAuthorizationCodeAtEdge } from "../../../../google-oauth-token-exchange.ts";
 import { getGoogleOAuthDiagnostic } from "../../../../google-oauth-diagnostics.ts";
 import { loadGoogleOAuthRuntime } from "../../../../google-oauth-runtime.ts";
 
@@ -123,7 +123,7 @@ export async function GET(request: Request) {
 
     stage = "token_exchange";
     const code = requestUrl.searchParams.get("code");
-    const tokens = await exchangeGoogleAuthorizationCode(
+    const tokens = await exchangeGoogleAuthorizationCodeAtEdge(
       runtime.config,
       code,
       transaction.codeVerifier,
