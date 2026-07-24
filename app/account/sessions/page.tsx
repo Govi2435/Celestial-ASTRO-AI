@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import styles from "./sessions.module.css";
 
 type ManagedSession = {
@@ -44,19 +45,6 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? "Unavailable" : DATE_FORMAT.format(date);
 }
 
-function relativeActivity(value: string) {
-  const timestamp = new Date(value).getTime();
-  if (!Number.isFinite(timestamp)) return "Unknown activity";
-  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
-  if (seconds < 60) return "Active moments ago";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `Active ${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Active ${hours} hr ago`;
-  const days = Math.floor(hours / 24);
-  return `Active ${days} day${days === 1 ? "" : "s"} ago`;
-}
-
 function sessionLabel(session: ManagedSession) {
   return session.authMethod === "google" ? "Google OAuth" : "Email magic link";
 }
@@ -80,7 +68,6 @@ export default function SessionManagementPage() {
   const [notice, setNotice] = useState("");
 
   const loadSessions = useCallback(async () => {
-    setView({ status: "loading" });
     try {
       const response = await fetch("/api/auth/sessions", {
         credentials: "include",
@@ -112,13 +99,10 @@ export default function SessionManagementPage() {
     void loadSessions();
   }, [loadSessions]);
 
-  const otherSessionCount = useMemo(
-    () =>
-      view.status === "ready"
-        ? view.sessions.filter((session) => !session.current).length
-        : 0,
-    [view],
-  );
+  const otherSessionCount =
+    view.status === "ready"
+      ? view.sessions.filter((session) => !session.current).length
+      : 0;
 
   async function mutateSessions(
     body: { action: "revoke-session"; sessionId: string } | { action: "revoke-others" },
@@ -143,9 +127,11 @@ export default function SessionManagementPage() {
       if (!response.ok || !payload.sessions) {
         throw new Error(payload.error || "The session change could not be completed.");
       }
-      if (view.status === "ready") {
-        setView({ ...view, sessions: payload.sessions });
-      }
+      setView((current) =>
+        current.status === "ready"
+          ? { ...current, sessions: payload.sessions ?? current.sessions }
+          : current,
+      );
       setNotice(
         body.action === "revoke-others"
           ? `${payload.count ?? 0} other session${payload.count === 1 ? "" : "s"} signed out.`
@@ -204,21 +190,26 @@ export default function SessionManagementPage() {
     }
   }
 
+  function retryLoading() {
+    setView({ status: "loading" });
+    void loadSessions();
+  }
+
   return (
     <main className={styles.shell}>
       <div className={styles.auroraOne} aria-hidden="true" />
       <div className={styles.auroraTwo} aria-hidden="true" />
 
       <header className={styles.topbar}>
-        <a className={styles.brand} href="/" aria-label="Celestial ASTRO AI home">
+        <Link className={styles.brand} href="/" aria-label="Celestial ASTRO AI home">
           <MoonMark />
           <span>
             <strong>Celestial</strong> ASTRO AI
             <small>Account Observatory</small>
           </span>
-        </a>
+        </Link>
         <nav aria-label="Account navigation" className={styles.navigation}>
-          <a href="/">Observatory</a>
+          <Link href="/">Observatory</Link>
           <span aria-current="page">Sessions</span>
         </nav>
         <span className={styles.secureBadge}>
@@ -279,7 +270,7 @@ export default function SessionManagementPage() {
             <span className={styles.eyebrow}>SESSION CONSOLE UNAVAILABLE</span>
             <h2 id="sessions-heading">Sessions could not be loaded</h2>
             <p>{view.message}</p>
-            <button className={styles.secondaryAction} type="button" onClick={() => void loadSessions()}>
+            <button className={styles.secondaryAction} type="button" onClick={retryLoading}>
               Try again
             </button>
           </div>
@@ -299,14 +290,8 @@ export default function SessionManagementPage() {
                 <p>{view.account.email}</p>
               </div>
               <div className={styles.accountStats} aria-label="Session summary">
-                <span>
-                  <strong>{view.sessions.length}</strong>
-                  Active
-                </span>
-                <span>
-                  <strong>{otherSessionCount}</strong>
-                  Other
-                </span>
+                <span><strong>{view.sessions.length}</strong>Active</span>
+                <span><strong>{otherSessionCount}</strong>Other</span>
               </div>
               <button
                 className={styles.secondaryAction}
@@ -333,36 +318,22 @@ export default function SessionManagementPage() {
                         <h3>{session.current ? "This browser" : "Another signed-in browser"}</h3>
                         {session.current && <span className={styles.currentBadge}>Current</span>}
                       </div>
-                      <p>
-                        {sessionLabel(session)} • {shortSessionId(session.id)}
-                      </p>
+                      <p>{sessionLabel(session)} • {shortSessionId(session.id)}</p>
                     </div>
-                    <span className={styles.activity}>{relativeActivity(session.lastSeenAt)}</span>
+                    <span className={styles.activity}>
+                      {session.current ? "Active in this browser" : "Active server session"}
+                    </span>
                   </div>
 
                   <dl className={styles.sessionDetails}>
-                    <div>
-                      <dt>Created</dt>
-                      <dd>{formatDate(session.createdAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>Last activity</dt>
-                      <dd>{formatDate(session.lastSeenAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>Idle expiry</dt>
-                      <dd>{formatDate(session.expiresAt)}</dd>
-                    </div>
-                    <div>
-                      <dt>Absolute expiry</dt>
-                      <dd>{formatDate(session.absoluteExpiresAt)}</dd>
-                    </div>
+                    <div><dt>Created</dt><dd>{formatDate(session.createdAt)}</dd></div>
+                    <div><dt>Last activity</dt><dd>{formatDate(session.lastSeenAt)}</dd></div>
+                    <div><dt>Idle expiry</dt><dd>{formatDate(session.expiresAt)}</dd></div>
+                    <div><dt>Absolute expiry</dt><dd>{formatDate(session.absoluteExpiresAt)}</dd></div>
                   </dl>
 
                   <div className={styles.sessionFooter}>
-                    <span>
-                      Token rotations <strong>{session.rotationCount}</strong>
-                    </span>
+                    <span>Token rotations <strong>{session.rotationCount}</strong></span>
                     {session.current ? (
                       <button
                         className={styles.dangerAction}
