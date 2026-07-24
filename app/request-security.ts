@@ -1,8 +1,4 @@
-import { randomBase64Url } from "./auth-compatibility.ts";
-import {
-  parseServerSessionCookie,
-  serverSessionCsrfToken,
-} from "./server-session.ts";
+import { randomBase64Url, sha256Base64Url } from "./auth-compatibility.ts";
 
 const BASE64URL_TOKEN = /^[A-Za-z0-9_-]{43}$/u;
 
@@ -13,6 +9,11 @@ export const REQUEST_SECURITY_PROFILE = {
   anonymousCsrfFieldName: "csrfToken",
   anonymousCsrfLifetimeSeconds: 10 * 60,
 } as const;
+
+export interface SessionCsrfStore {
+  setSessionCsrfTokenHash(sessionId: string, tokenHash: string, issuedAt: string): Promise<boolean>;
+  matchesSessionCsrfTokenHash(sessionId: string, tokenHash: string): Promise<boolean>;
+}
 
 export class RequestSecurityError extends Error {
   readonly code: string;
@@ -70,23 +71,31 @@ export function assertTrustedMutation(request: Request) {
   }
 }
 
-export async function sessionCsrfTokenFromCookie(cookieHeader: string | null) {
-  const sessionToken = parseServerSessionCookie(cookieHeader);
-  if (!sessionToken) throw new RequestSecurityError("csrf_session_missing", 401);
-  return serverSessionCsrfToken(sessionToken);
+export async function issueSessionCsrf(
+  store: SessionCsrfStore,
+  sessionId: string,
+  now = new Date(),
+) {
+  const token = randomBase64Url(32);
+  const tokenHash = await sha256Base64Url(token);
+  const stored = await store.setSessionCsrfTokenHash(sessionId, tokenHash, now.toISOString());
+  if (!stored) throw new RequestSecurityError("csrf_session_unavailable", 401);
+  return token;
 }
 
-export async function assertSessionCsrf(request: Request) {
+export async function assertSessionCsrf(
+  request: Request,
+  store: SessionCsrfStore,
+  sessionId: string,
+) {
   assertTrustedMutation(request);
   const submitted = assertCsrfToken(
     request.headers.get(REQUEST_SECURITY_PROFILE.sessionCsrfHeader),
     "csrf_token_missing",
   );
-  const expected = await sessionCsrfTokenFromCookie(request.headers.get("cookie"));
-  if (!constantTimeEqual(submitted, expected)) {
-    throw new RequestSecurityError("csrf_token_invalid");
-  }
-  return expected;
+  const submittedHash = await sha256Base64Url(submitted);
+  const matches = await store.matchesSessionCsrfTokenHash(sessionId, submittedHash);
+  if (!matches) throw new RequestSecurityError("csrf_token_invalid");
 }
 
 export function createAnonymousCsrfToken() {
