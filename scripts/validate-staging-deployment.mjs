@@ -31,7 +31,7 @@ export function assertSafeStagingConfig(
   assert.deepEqual(config.assets, {
     directory: expectedAssetsDirectory,
     binding: "ASSETS",
-    run_worker_first: true,
+    run_worker_first: false,
   });
   assert.deepEqual(config.images, { binding: "IMAGES" });
   assert.equal(config.vars?.APP_ENV, "staging");
@@ -93,5 +93,5 @@ export function assertBuiltStagingArtifact(root = projectRoot) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   assertSafeStagingConfig(loadStagingConfig());
   assertBuiltStagingArtifact();
-  console.log("Validated staging deployment: isolated Worker, optional approved D1 injection, no R2, and complete vinext artifact.");
+  console.log("Validated staging deployment: isolated Worker, asset-first client delivery, optional approved D1 injection, no R2, and complete vinext artifact.");
 }
