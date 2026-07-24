@@ -1,7 +1,7 @@
 # Celestial ASTRO AI — Continuous Integration
 
 - Status: Active baseline
-- Jira: `KAN-17 / ASTRO-111–ASTRO-113`
+- Jira: `KAN-17 / ASTRO-111–ASTRO-114`
 - Workflow: `.github/workflows/ci.yml`
 
 ## Current automated checks
@@ -15,7 +15,7 @@ It exposes four independent jobs on clean GitHub-hosted Ubuntu runners with Node
 | `Lint` | `npm run lint` | Enforce the current ESLint and Next.js rules |
 | `Type check` | `npm run typecheck` | Run strict TypeScript validation with no output |
 | `Migration drift` | `npm run db:validate` | Replay committed migrations and compare their canonical schema with the reviewed baseline |
-| `Unit, build, and rendered HTML` | `npm test` | Run unit/domain tests, production build, and rendered HTML verification |
+| `Unit, build, and rendered HTML` | `npm run test:ci` | Run the verified suite, preserve its exit code, and create validated test evidence |
 
 The workflow has read-only repository permissions, does not persist checkout credentials, does not use production secrets, cancels superseded runs, and uses bounded job timeouts.
 
@@ -51,14 +51,40 @@ npm run db:baseline
 
 The SQL migration and manifest changes must be reviewed together. CI never runs the baseline-writing command.
 
+## Test artifact contract
+
+The test job runs `npm run test:ci`, which captures the existing `npm test` output without masking its exit code. After the test step finishes, CI validates and uploads a single artifact named:
+
+```text
+ci-test-evidence-<run-id>-<run-attempt>
+```
+
+The artifact contains only:
+
+| File | Purpose |
+| --- | --- |
+| `test.log` | Complete console output from unit/domain tests, the production build, and rendered HTML verification |
+| `summary.json` | Minimal execution metadata, outcome, exit code, duration, commit, ref, runner and Node version |
+
+The artifact is uploaded on both successful and failed test runs so reviewers can inspect failure evidence. Retention is 14 days.
+
+Before upload, `npm run artifact:validate` enforces all of the following:
+
+- exactly the two approved files are present;
+- no symbolic links or unexpected files are included;
+- per-file and total size limits are respected;
+- the summary schema and outcome are internally consistent; and
+- recognizable API keys, access tokens, environment assignments and private-key material are rejected.
+
+The workflow does not upload `.env` files, the full environment, dependency caches, `.next`, source maps, generated PDFs, database files, birth data or report content. Generated local evidence under `artifacts/` is ignored by Git.
+
 ## Current limitations
 
-CI checks are active, but they are not yet mandatory merge gates. The following remain pending:
+CI checks and retained test evidence are active, but they are not yet mandatory merge gates. The following remain pending:
 
-- uploaded test artifacts;
 - branch protection and required status checks;
 - staging deployment and promotion;
 - security and dependency scanning;
 - full P7/P8 typed-schema parity and production migration execution.
 
-These controls remain tracked under ASTRO-114 through ASTRO-116 and P9-D. They must not be described as active before their evidence exists.
+These controls remain tracked under ASTRO-115, ASTRO-116 and P9-D. They must not be described as active before their evidence exists.
