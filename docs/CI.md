@@ -1,8 +1,9 @@
 # Celestial ASTRO AI — Continuous Integration
 
-- Status: Active CI baseline with enforced `main` branch protection
-- Jira: `KAN-17 / ASTRO-111–ASTRO-115`
-- Workflow: `.github/workflows/ci.yml`
+- Status: Active CI and protected `main`; staging workflow prepared, live activation pending
+- Jira: `KAN-17 / ASTRO-111–ASTRO-116`
+- Core workflow: `.github/workflows/ci.yml`
+- Staging workflow: `.github/workflows/deploy-staging.yml`
 
 ## Current automated checks
 
@@ -15,7 +16,7 @@ It exposes four independent jobs on clean GitHub-hosted Ubuntu runners with Node
 | `Lint` | `npm run lint` | Enforce the current ESLint and Next.js rules |
 | `Type check` | `npm run typecheck` | Run strict TypeScript validation with no output |
 | `Migration drift` | `npm run db:validate` | Replay committed migrations and compare their canonical schema with the reviewed baseline |
-| `Unit, build, and rendered HTML` | `npm run test:ci` | Run the verified suite, preserve its exit code, and create validated test evidence |
+| `Unit, build, and rendered HTML` | `npm run test:ci` | Run unit/domain tests, production build, rendered HTML verification and validated test evidence |
 
 The workflow has read-only repository permissions, does not persist checkout credentials, does not use production secrets, cancels superseded runs, and uses bounded job timeouts.
 
@@ -91,19 +92,33 @@ The live rule targets `main` and enforces:
 - no force pushes; and
 - no branch deletion.
 
-Required approving reviews remain disabled while the repository is solo-owned, preventing author self-lockout. The repository-side apply/read-back utility remains available for future administrative verification:
+Required approving reviews remain disabled while the repository is solo-owned, preventing author self-lockout. See `docs/BRANCH_PROTECTION.md` for the full policy and recovery procedure.
 
-```text
-GITHUB_ADMIN_TOKEN=<short-lived-token> npm run github:verify-main-protection
-```
+## Staging deployment contract
 
-See `docs/BRANCH_PROTECTION.md` for the full policy and recovery procedure.
+`.github/workflows/deploy-staging.yml` deploys an isolated Worker named `cosmicsphere-staging`.
+
+Automatic deployment is eligible only after the core `CI` workflow succeeds for a push to protected `main`, and only when repository variable `STAGING_DEPLOY_ENABLED` is `true`. A manual dispatch from `main` supports first activation and controlled recovery.
+
+The workflow:
+
+- checks out the exact CI-proven commit;
+- uses GitHub environment `staging`;
+- requires only `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`;
+- builds and validates the vinext artifact;
+- deploys with `wrangler.staging.jsonc`;
+- smoke tests `/` and `/api/certification`;
+- records the returned deployment URL; and
+- uploads secret-scanned deployment evidence for 14 days.
+
+The staging config has no production route, D1, R2, KV, Durable Object or service binding. Production promotion is not part of this workflow. See `docs/STAGING_DEPLOYMENT.md` for activation and rollback instructions.
 
 ## Current limitations
 
 The following remain pending:
 
-- staging deployment and promotion;
+- live staging environment credentials and first successful deployment;
+- production deployment and promotion;
 - security and dependency scanning;
 - full P7/P8 typed-schema parity and production migration execution.
 
