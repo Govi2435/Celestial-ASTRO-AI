@@ -1,6 +1,6 @@
 # Celestial ASTRO AI — Continuous Integration
 
-- Status: Active CI baseline; branch-protection policy prepared, live activation pending
+- Status: Active CI baseline with enforced `main` branch protection
 - Jira: `KAN-17 / ASTRO-111–ASTRO-115`
 - Workflow: `.github/workflows/ci.yml`
 
@@ -78,25 +78,33 @@ Before upload, `npm run artifact:validate` enforces all of the following:
 
 The workflow does not upload `.env` files, the full environment, dependency caches, `.next`, source maps, generated PDFs, database files, birth data or report content. Generated local evidence under `artifacts/` is ignored by Git.
 
-## Main-branch protection policy
+## Enforced `main` branch protection
 
-The reviewed desired state is stored in `.github/policies/main-branch-protection.json`. It requires pull requests, strict success from all four CI jobs, conversation resolution, admin enforcement, and blocks force pushes and deletion.
+The reviewed policy is stored in `.github/policies/main-branch-protection.json` and was activated through GitHub Settings on 2026-07-24.
 
-The apply-and-verify command is:
+The live rule targets `main` and enforces:
+
+- changes through pull requests;
+- strict, up-to-date success from all four CI jobs;
+- conversation resolution before merging;
+- administrator enforcement with no bypass;
+- no force pushes; and
+- no branch deletion.
+
+Required approving reviews remain disabled while the repository is solo-owned, preventing author self-lockout. The repository-side apply/read-back utility remains available for future administrative verification:
 
 ```text
-GITHUB_ADMIN_TOKEN=<short-lived-token> npm run github:protect-main
+GITHUB_ADMIN_TOKEN=<short-lived-token> npm run github:verify-main-protection
 ```
 
-Live branch protection is GitHub control-plane state. The policy and script are auditable repository assets, but ASTRO-115 is not operationally complete until the live `main` protection is applied and read back successfully. See `docs/BRANCH_PROTECTION.md`.
+See `docs/BRANCH_PROTECTION.md` for the full policy and recovery procedure.
 
 ## Current limitations
 
 The following remain pending:
 
-- live activation and verification of the committed `main` branch-protection policy;
 - staging deployment and promotion;
 - security and dependency scanning;
 - full P7/P8 typed-schema parity and production migration execution.
 
-These controls remain tracked under ASTRO-115, ASTRO-116 and P9-D. They must not be described as active before their evidence exists.
+These controls remain tracked under ASTRO-116 and P9-D. They must not be described as active before their evidence exists.
